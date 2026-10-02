@@ -12,6 +12,17 @@ export interface SampleProduct {
 
 export const SAMPLE_PRODUCTS: SampleProduct[] = [
   {
+    id: 'sample-keychain',
+    name: 'owl-keychain.png',
+    type: 'Metal Keychain',
+    category: 'Jewelry / Metal',
+    generate: async () => {
+      const res = await fetch('/samples/owl-keychain.png');
+      const blob = await res.blob();
+      return new File([blob], 'owl-keychain.png', { type: 'image/png' });
+    },
+  },
+  {
     id: 'sample-sneaker',
     name: 'streetwear-sneaker.png',
     type: 'Sneakers',

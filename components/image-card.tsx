@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { QueueItem } from '@/types/image';
 import { formatBytes, formatDuration, sanitizeFilename } from '@/lib/utils';
 import {
@@ -13,6 +13,8 @@ import {
   RotateCcw,
   Eye,
   SlidersHorizontal,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { triggerBrowserDownload } from '@/lib/image-processing/export';
 
@@ -33,6 +35,8 @@ export function ImageCard({
   onRetry,
   disabled,
 }: ImageCardProps) {
+  const [isCopied, setIsCopied] = useState(false);
+
   const isCompleted = item.status === 'completed';
   const isProcessing = item.status === 'processing';
   const isFailed = item.status === 'failed';
@@ -43,6 +47,20 @@ export function ImageCard({
     if (item.resultBlob) {
       const filename = sanitizeFilename(item.name, '-transparent');
       triggerBrowserDownload(item.resultBlob, filename);
+    }
+  };
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.resultBlob) return;
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': item.resultBlob }),
+      ]);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.warn('Clipboard write error:', err);
     }
   };
 
@@ -176,6 +194,17 @@ export function ImageCard({
             >
               <Eye className="w-3 h-3 text-zinc-400" />
               Inspect
+            </button>
+            <button
+              onClick={handleCopy}
+              title={isCopied ? 'Copied to clipboard!' : 'Copy transparent PNG to clipboard'}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                isCopied
+                  ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
+                  : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-300 hover:text-white'
+              }`}
+            >
+              {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
             <button
               onClick={handleDownload}

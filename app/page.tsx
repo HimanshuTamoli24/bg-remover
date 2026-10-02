@@ -92,17 +92,90 @@ export default function Home() {
   }, [activeModelId]);
 
   // Add files to queue
-  const handleFilesSelected = async (files: File[]) => {
+  const handleFilesSelected = useCallback(async (files: File[]) => {
     try {
       await imageQueue.addFiles(files);
-      // Auto-select first item if none selected
-      if (!selectedItemId && files.length > 0) {
-        // Will be updated via subscription
-      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Could not add images');
     }
-  };
+  }, []);
+
+  // Dedicated button paste handler using modern Clipboard API
+  const handlePasteFromClipboard = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        alert('Please press Ctrl+V (or ⌘V) directly on the page to paste your copied image.');
+        return;
+      }
+
+      const clipboardItems = await navigator.clipboard.read();
+      const imageFiles: File[] = [];
+
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const ext = imageType.split('/')[1] || 'png';
+          const file = new File([blob], `clipboard-image-${Date.now()}.${ext}`, {
+            type: imageType,
+          });
+          imageFiles.push(file);
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        handleFilesSelected(imageFiles);
+      } else {
+        alert('No image found in your clipboard. Please copy an image (or take a screenshot) and try again!');
+      }
+    } catch (err) {
+      console.warn('Clipboard read permission or API error:', err);
+      alert('Could not access clipboard directly. Please press Ctrl + V (or ⌘V) to paste the image directly.');
+    }
+  }, [handleFilesSelected]);
+
+  // Global window paste listener: Users can press Ctrl+V anywhere
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      // Don't intercept if user is typing in a text/color input
+      if (
+        document.activeElement instanceof HTMLInputElement &&
+        document.activeElement.type === 'text'
+      ) {
+        return;
+      }
+
+      if (!e.clipboardData) return;
+
+      const items = e.clipboardData.items;
+      const imageFiles: File[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            const ext = file.type.split('/')[1] || 'png';
+            const namedFile = new File([file], `pasted-image-${Date.now()}.${ext}`, {
+              type: file.type || 'image/png',
+            });
+            imageFiles.push(namedFile);
+          }
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        handleFilesSelected(imageFiles);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [handleFilesSelected]);
 
   // Load sample product
   const handleLoadSample = async (sampleId: string) => {
@@ -188,6 +261,7 @@ export default function Home() {
           <UploadZone
             currentCount={queueState.items.length}
             onFilesSelected={handleFilesSelected}
+            onPasteFromClipboard={handlePasteFromClipboard}
             disabled={queueState.isProcessing}
           />
 

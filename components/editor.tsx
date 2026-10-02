@@ -13,6 +13,7 @@ import {
   Sparkles,
   SunMedium,
   Check,
+  Copy,
 } from 'lucide-react';
 
 interface EditorProps {
@@ -96,6 +97,28 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
     }
   };
 
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopyStyled = async () => {
+    if (!imageElementRef.current) return;
+    try {
+      const blob = await renderFinalBlob(
+        imageElementRef.current,
+        settings,
+        item.originalWidth,
+        item.originalHeight
+      );
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ]);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy styled image to clipboard:', err);
+      alert('Could not copy image to clipboard in this browser.');
+    }
+  };
+
   return (
     <div className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden mt-6">
       <div className="p-4 bg-zinc-950/60 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
@@ -109,14 +132,28 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
           </span>
         </div>
 
-        <button
-          onClick={handleDownloadStyled}
-          disabled={isExporting}
-          className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
-        >
-          <Download className="w-3.5 h-3.5" />
-          {isExporting ? 'Exporting...' : 'Download Styled PNG'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyStyled}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              isCopied
+                ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
+                : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200'
+            }`}
+          >
+            {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{isCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
+          </button>
+
+          <button
+            onClick={handleDownloadStyled}
+            disabled={isExporting}
+            className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {isExporting ? 'Exporting...' : 'Download Styled PNG'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
