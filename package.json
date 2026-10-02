@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
+    "jszip": "^3.10.2",
+    "lucide-react": "^1.49.0",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8"
