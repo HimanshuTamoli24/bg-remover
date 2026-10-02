@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, DragEvent, ChangeEvent, ClipboardEvent } from 'react';
-import { UploadCloud, ShieldCheck, AlertCircle, Sparkles, Clipboard, Command } from 'lucide-react';
+import { Upload, AlertCircle, Clipboard } from 'lucide-react';
 import { MAX_BATCH_SIZE } from '@/lib/queue/image-queue';
 import { isSupportedImageType } from '@/lib/image-processing/resize';
 
@@ -28,18 +28,19 @@ export function UploadZone({
     setErrorMessage(null);
     const fileArray = Array.from(incomingFiles);
 
-    // Filter valid image types - support all major raster & vector image formats
+    // Filter valid image types
     const validFiles = fileArray.filter(isSupportedImageType);
 
     if (validFiles.length === 0) {
-      setErrorMessage('Please select or paste valid image files (PNG, JPG, WEBP, AVIF, BMP, GIF, SVG, TIFF, etc.).');
+      setErrorMessage(
+        'Please select or drop valid image files (JPG, PNG, WEBP, JPEG, AVIF).'
+      );
       return;
     }
 
-    // Hard requirement 5: Validate max 10 images
     if (currentCount + validFiles.length > MAX_BATCH_SIZE) {
       setErrorMessage(
-        `Maximum ${MAX_BATCH_SIZE} images per batch. You have ${currentCount} loaded and tried to add ${validFiles.length}. Please select fewer images.`
+        `Maximum ${MAX_BATCH_SIZE} images per batch. ${remainingSlots} remaining.`
       );
       return;
     }
@@ -118,107 +119,93 @@ export function UploadZone({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.jpg,.jpeg,.png,.webp,.avif,.bmp,.tiff,.tif,.gif,.svg,.ico,.heic,.heif"
+        accept="image/*,.jpg,.jpeg,.png,.webp,.avif"
         onChange={onFileInputChange}
         className="hidden"
         disabled={disabled || remainingSlots <= 0}
       />
 
+      {/* Full-width, high-touch drag-and-drop target */}
       <div
         onClick={openPicker}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        className={`relative group cursor-pointer transition-all duration-200 rounded-2xl border-2 border-dashed p-8 md:p-12 text-center flex flex-col items-center justify-center ${
+        role="button"
+        tabIndex={0}
+        aria-label="Upload images by dropping files or clicking to browse"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openPicker();
+          }
+        }}
+        className={`w-full h-[240px] sm:h-[280px] md:h-[300px] rounded-xl sm:rounded-2xl border border-dashed flex flex-col items-center justify-center p-6 text-center transition-all cursor-pointer select-none outline-none focus-visible:ring-1 focus-visible:ring-[var(--text-primary)] ${
           disabled || remainingSlots <= 0
-            ? 'opacity-60 cursor-not-allowed border-zinc-800 bg-zinc-950/40'
+            ? 'opacity-50 cursor-not-allowed border-[var(--border)] bg-[var(--surface)]'
             : isDragging
-            ? 'border-indigo-500 bg-indigo-500/10 scale-[1.01]'
-            : 'border-zinc-800 hover:border-zinc-600 bg-zinc-900/40 hover:bg-zinc-900/60'
+            ? 'border-[var(--text-primary)] bg-[var(--surface-hover)]'
+            : 'border-[var(--border-strong)] hover:border-[var(--text-primary)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
         }`}
       >
-        <div className="w-16 h-16 rounded-2xl bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center mb-4 text-zinc-300 group-hover:text-indigo-400 group-hover:border-indigo-500/40 group-hover:scale-105 transition-all">
-          <UploadCloud className="w-8 h-8" />
+        {/* Monochrome Upload Icon */}
+        <div className="w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--background)] flex items-center justify-center mb-4 text-[var(--text-primary)] transition-transform">
+          <Upload className="w-4 h-4 text-[var(--text-primary)]" />
         </div>
 
-        <h3 className="text-lg md:text-xl font-medium text-zinc-100 mb-2">
-          {remainingSlots <= 0 ? 'Batch limit reached (10 images)' : 'Drop product images here'}
+        {/* Primary label */}
+        <h3 className="text-base sm:text-lg font-medium text-[var(--text-primary)] mb-1">
+          {remainingSlots <= 0 ? 'Batch limit reached (10 images)' : 'Drop images here'}
         </h3>
 
-        <p className="text-sm text-zinc-400 mb-4">
-          {remainingSlots <= 0 ? (
-            'Process or clear existing images to add more'
-          ) : (
-            <>
-              or <span className="text-indigo-400 font-medium underline underline-offset-4">click to browse</span> from your device
-            </>
-          )}
+        {/* Secondary label */}
+        <p className="text-sm text-[var(--text-secondary)] mb-3">
+          {remainingSlots <= 0
+            ? 'Clear completed images to add more'
+            : 'or click to browse from device'}
         </p>
 
-        {/* Dedicated Paste from Clipboard button */}
+        {/* Format metadata restrictions */}
+        <div className="text-xs text-[var(--text-muted)] tracking-wider mb-4">
+          JPG · PNG · WEBP · JPEG
+        </div>
+
+        {/* Clipboard helper button & shortcut */}
         {remainingSlots > 0 && !disabled && (
-          <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onPasteFromClipboard?.();
               }}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-2 border border-zinc-700/70 hover:border-indigo-500/50 shadow-md transition-all hover:scale-105"
+              className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--background)] hover:bg-[var(--surface)] text-[var(--text-primary)] text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
-              <Clipboard className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Paste Copied Image</span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] rounded bg-zinc-900 text-zinc-400 border border-zinc-700 font-mono">
-                Ctrl + V
+              <Clipboard className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+              <span>Paste from clipboard</span>
+              <kbd className="hidden sm:inline-block px-1 py-0.5 text-[10px] rounded bg-[var(--surface)] text-[var(--text-muted)] border border-[var(--border)] font-mono ml-0.5">
+                Ctrl+V
               </kbd>
             </button>
           </div>
         )}
-
-        <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-400">
-          <span className="px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/50">
-            PNG • JPG • WEBP • AVIF • BMP • GIF • SVG • TIFF & more
-          </span>
-          <span className="px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/50">
-            {remainingSlots} / {MAX_BATCH_SIZE} slots remaining
-          </span>
-          <span className="px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 flex items-center gap-1">
-            <Sparkles className="w-3 h-3" />
-            100% In-Browser AI
-          </span>
-        </div>
       </div>
 
-      {/* Error message banner */}
+      {/* Error state: Monochrome border + text */}
       {errorMessage && (
-        <div className="mt-4 p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-200 text-sm flex items-start gap-3 animate-in fade-in">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-semibold text-red-300">Selection Error</p>
-            <p className="mt-0.5">{errorMessage}</p>
+        <div className="mt-3 p-3 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-primary)] text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[var(--text-secondary)] flex-shrink-0" />
+            <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-red-400 hover:text-red-200 text-xs px-2 py-1 rounded border border-red-800/60"
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] underline text-xs"
           >
             Dismiss
           </button>
         </div>
       )}
-
-      {/* Prominent Privacy Guarantee & Clipboard hint */}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-zinc-400">
-        <div className="flex items-center gap-1.5">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>
-            <strong>100% Client-Side:</strong> Never uploaded to a server.
-          </span>
-        </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-zinc-400">
-          <Clipboard className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Press <strong>Ctrl + V</strong> (or <strong>⌘V</strong>) anywhere on page to paste copied images</span>
-        </div>
-      </div>
     </div>
   );
 }

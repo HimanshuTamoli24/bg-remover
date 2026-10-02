@@ -1,20 +1,15 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { QueueItem, EditorSettings } from '@/types/image';
-import { renderEditedImageCanvas, renderFinalBlob, triggerBrowserDownload } from '@/lib/image-processing/export';
-import { sanitizeFilename } from '@/lib/utils';
+import { QueueItem, EditorSettings, ExportFormat, BackgroundType, ProductPosition } from '@/types/image';
 import {
-  Download,
-  Paintbrush,
-  Maximize,
-  Sliders,
-  Layers,
-  Sparkles,
-  SunMedium,
-  Check,
-  Copy,
-} from 'lucide-react';
+  renderEditedImageCanvas,
+  renderFinalBlob,
+  triggerBrowserDownload,
+} from '@/lib/image-processing/export';
+import { sanitizeFilename } from '@/lib/utils';
+import { Download, Copy, Check } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface EditorProps {
   item: QueueItem;
@@ -25,9 +20,9 @@ interface EditorProps {
 export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const imageElementRef = useRef<HTMLImageElement | null>(null);
 
-  // Load cutout image element for rendering
   useEffect(() => {
     if (!item.resultUrl) return;
 
@@ -40,14 +35,12 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
     img.src = item.resultUrl;
   }, [item.resultUrl]);
 
-  // Render preview whenever settings change
   const renderPreview = useCallback(() => {
     if (!imageElementRef.current || !previewCanvasRef.current) return;
 
     const img = imageElementRef.current;
     const canvas = previewCanvasRef.current;
 
-    // Use a reasonable display resolution for live preview
     const maxDim = 800;
     let targetW = img.naturalWidth || 800;
     let targetH = img.naturalHeight || 800;
@@ -75,7 +68,7 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
     renderPreview();
   }, [renderPreview]);
 
-  const handleDownloadStyled = async () => {
+  const handleDownload = async () => {
     if (!imageElementRef.current) return;
     setIsExporting(true);
     try {
@@ -85,26 +78,27 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
         item.originalWidth,
         item.originalHeight
       );
-      const filename = sanitizeFilename(
-        item.name,
-        `-${settings.backgroundType}${settings.shadow ? '-shadow' : ''}`
-      );
+      const ext = settings.exportFormat || 'png';
+      const suffix =
+        settings.backgroundType === 'transparent'
+          ? '-cutout'
+          : `-${settings.backgroundType}`;
+      const filename = sanitizeFilename(item.name, `${suffix}.${ext}`);
       triggerBrowserDownload(blob, filename);
     } catch (err) {
-      console.error('Failed to export styled image:', err);
+      console.error('Failed to export image:', err);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const [isCopied, setIsCopied] = useState(false);
-
-  const handleCopyStyled = async () => {
+  const handleCopy = async () => {
     if (!imageElementRef.current) return;
     try {
+      // ClipboardItem typically requires image/png
       const blob = await renderFinalBlob(
         imageElementRef.current,
-        settings,
+        { ...settings, exportFormat: 'png' },
         item.originalWidth,
         item.originalHeight
       );
@@ -114,104 +108,46 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
-      console.warn('Failed to copy styled image to clipboard:', err);
+      console.warn('Failed to copy to clipboard:', err);
       alert('Could not copy image to clipboard in this browser.');
     }
   };
 
   return (
-    <div className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden mt-6">
-      <div className="p-4 bg-zinc-950/60 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Paintbrush className="w-4 h-4 text-indigo-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">
-            Product Styling & Export
-          </h3>
-          <span className="text-xs text-zinc-400">
-            (Applies to individual export & batch ZIP)
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleCopyStyled}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-              isCopied
-                ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
-                : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200'
-            }`}
-          >
-            {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{isCopied ? 'Copied!' : 'Copy to Clipboard'}</span>
-          </button>
-
-          <button
-            onClick={handleDownloadStyled}
-            disabled={isExporting}
-            className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {isExporting ? 'Exporting...' : 'Download Styled PNG'}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+    <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl sm:rounded-2xl p-5 sm:p-6 mt-6 transition-colors">
+      <div className="flex flex-col lg:flex-row gap-8">
         {/* Controls Column */}
-        <div className="space-y-6 lg:border-r lg:border-zinc-800 lg:pr-6">
-          {/* 1. Background Option */}
+        <div className="w-full lg:w-1/2 flex flex-col gap-5">
+          {/* Section: Background */}
           <div>
-            <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider block mb-2.5">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block mb-2">
               Background
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ ...settings, backgroundType: 'transparent' })}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all ${
-                  settings.backgroundType === 'transparent'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white ring-2 ring-indigo-500/20'
-                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                }`}
-              >
-                <div className="w-6 h-6 rounded-lg checkerboard-bg border border-zinc-700 mb-1.5" />
-                Transparent
-              </button>
+            <div className="grid grid-cols-4 gap-2">
+              {(['transparent', 'white', 'black', 'custom'] as const).map((bg) => {
+                const isSelected = settings.backgroundType === bg;
+                return (
+                  <button
+                    key={bg}
+                    type="button"
+                    onClick={() => {
+                      onUpdateSettings({ ...settings, backgroundType: bg });
+                    }}
+                    className={`h-9 px-3 rounded-md text-xs font-medium border flex items-center justify-center capitalize transition-colors ${
+                      isSelected
+                        ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] border-[var(--text-primary)]'
+                        : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--border-strong)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {bg}
+                  </button>
+                );
+              })}
+            </div>
 
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ ...settings, backgroundType: 'white' })}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all ${
-                  settings.backgroundType === 'white'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white ring-2 ring-indigo-500/20'
-                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                }`}
-              >
-                <div className="w-6 h-6 rounded-lg bg-white border border-zinc-300 mb-1.5" />
-                Pure White
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({ ...settings, backgroundType: 'black' })}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all ${
-                  settings.backgroundType === 'black'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white ring-2 ring-indigo-500/20'
-                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                }`}
-              >
-                <div className="w-6 h-6 rounded-lg bg-black border border-zinc-700 mb-1.5" />
-                Black
-              </button>
-
-              <div
-                onClick={() => onUpdateSettings({ ...settings, backgroundType: 'custom' })}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
-                  settings.backgroundType === 'custom'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white ring-2 ring-indigo-500/20'
-                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                }`}
-              >
+            {/* Custom Color Input if selected */}
+            {settings.backgroundType === 'custom' && (
+              <div className="mt-2.5 flex items-center gap-2">
                 <input
                   type="color"
                   value={settings.customColor}
@@ -222,108 +158,202 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
                       customColor: e.target.value,
                     })
                   }
-                  className="w-6 h-6 rounded-lg cursor-pointer border-0 p-0 mb-1.5 bg-transparent"
+                  className="w-8 h-8 rounded border border-[var(--border)] p-0 cursor-pointer bg-transparent"
                 />
-                Custom
+                <input
+                  type="text"
+                  value={settings.customColor}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      backgroundType: 'custom',
+                      customColor: e.target.value,
+                    })
+                  }
+                  className="h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--text-primary)] font-mono uppercase w-28"
+                />
               </div>
-            </div>
+            )}
           </div>
 
-          {/* 2. Positioning */}
+          {/* Section: Export Format */}
           <div>
-            <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider block mb-2.5">
-              Product Positioning
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block mb-2">
+              Format
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(['contain', 'fit', 'center'] as const).map((pos) => (
-                <button
-                  key={pos}
-                  type="button"
-                  onClick={() => onUpdateSettings({ ...settings, positioning: pos })}
-                  className={`py-2 px-3 rounded-xl border text-xs font-medium capitalize transition-all ${
-                    settings.positioning === pos
-                      ? 'border-indigo-500 bg-indigo-500/10 text-white ring-1 ring-indigo-500'
-                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  {pos}
-                </button>
-              ))}
+              {(['png', 'jpg', 'webp'] as const).map((fmt) => {
+                const isSelected = (settings.exportFormat || 'png') === fmt;
+                return (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({ ...settings, exportFormat: fmt })
+                    }
+                    className={`h-9 px-3 rounded-md text-xs font-medium border flex items-center justify-center uppercase transition-colors ${
+                      isSelected
+                        ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] border-[var(--text-primary)]'
+                        : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--border-strong)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {fmt}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* 3. Padding Slider */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-                Padding
+          {/* Section: Product Positioning & Padding */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block mb-2">
+                Positioning
               </label>
-              <span className="text-xs font-mono text-indigo-400">{settings.padding}%</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['contain', 'fit', 'center'] as const).map((pos) => {
+                  const isSelected = settings.positioning === pos;
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({ ...settings, positioning: pos })
+                      }
+                      className={`h-8 px-2 rounded-md text-xs font-medium border flex items-center justify-center capitalize transition-colors ${
+                        isSelected
+                          ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] border-[var(--text-primary)]'
+                          : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--border-strong)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {pos}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={30}
-              step={1}
-              value={settings.padding}
-              onChange={(e) =>
-                onUpdateSettings({ ...settings, padding: parseInt(e.target.value, 10) })
-              }
-              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-            />
-            <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
-              <span>Edge (0%)</span>
-              <span>Generous (30%)</span>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Padding
+                </label>
+                <span className="text-xs font-mono text-[var(--text-muted)]">
+                  {settings.padding}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={1}
+                value={settings.padding}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    ...settings,
+                    padding: parseInt(e.target.value, 10),
+                  })
+                }
+                className="w-full h-1 bg-[var(--border)] rounded appearance-none cursor-pointer accent-[var(--text-primary)]"
+              />
             </div>
           </div>
 
-          {/* 4. Natural Shadow Toggle */}
-          <div className="pt-2 border-t border-zinc-800/80">
-            <label className="flex items-center justify-between cursor-pointer group">
+          {/* Section: Shadow Toggle */}
+          <div className="pt-2 border-t border-[var(--border)]">
+            <label className="flex items-center justify-between cursor-pointer select-none">
               <div>
-                <span className="text-xs font-semibold text-zinc-200 block">
-                  Add Product Shadow
+                <span className="text-xs font-medium text-[var(--text-primary)] block">
+                  Studio Shadow
                 </span>
-                <span className="text-[11px] text-zinc-400 block mt-0.5">
-                  Generates a subtle, natural studio contact shadow beneath the product
+                <span className="text-[11px] text-[var(--text-muted)] block mt-0.5">
+                  Natural contact shadow under product
                 </span>
               </div>
               <input
                 type="checkbox"
                 checked={settings.shadow}
-                onChange={(e) => onUpdateSettings({ ...settings, shadow: e.target.checked })}
-                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 focus:ring-offset-zinc-900 border-zinc-700 bg-zinc-950 cursor-pointer"
+                onChange={(e) =>
+                  onUpdateSettings({ ...settings, shadow: e.target.checked })
+                }
+                className="w-4 h-4 rounded border-[var(--border-strong)] accent-[var(--text-primary)] cursor-pointer"
               />
             </label>
 
             {settings.shadow && (
-              <div className="mt-4 pl-3 border-l-2 border-indigo-500/40 space-y-3">
-                <div>
-                  <div className="flex justify-between text-[11px] text-zinc-400 mb-1">
-                    <span>Shadow Softness</span>
-                    <span className="font-mono text-zinc-300">{settings.shadowBlur}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={6}
-                    max={48}
-                    value={settings.shadowBlur}
-                    onChange={(e) =>
-                      onUpdateSettings({ ...settings, shadowBlur: parseInt(e.target.value, 10) })
-                    }
-                    className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                  />
+              <div className="mt-3 pl-3 border-l border-[var(--border-strong)] space-y-2">
+                <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+                  <span>Softness</span>
+                  <span className="font-mono">{settings.shadowBlur}px</span>
                 </div>
+                <input
+                  type="range"
+                  min={6}
+                  max={48}
+                  value={settings.shadowBlur}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      shadowBlur: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full h-1 bg-[var(--border)] rounded appearance-none cursor-pointer accent-[var(--text-primary)]"
+                />
               </div>
             )}
           </div>
+
+          {/* Section: Action Buttons */}
+          <div className="pt-4 border-t border-[var(--border)] flex flex-wrap items-center gap-2.5">
+            {/* Primary Download Button */}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={isExporting}
+              className="flex-1 h-10 px-4 rounded-md bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-90 text-xs font-medium flex items-center justify-center gap-2 transition-opacity disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>
+                {isExporting
+                  ? 'Exporting…'
+                  : `Download ${(settings.exportFormat || 'png').toUpperCase()}`}
+              </span>
+            </button>
+
+            {/* Secondary Copy Button */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="h-10 px-3.5 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--background)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            >
+              {isCopied ? (
+                <Check className="w-3.5 h-3.5" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+              <span>{isCopied ? 'Copied' : 'Copy'}</span>
+            </button>
+
+            {/* Apply settings to all images button */}
+            <button
+              type="button"
+              onClick={() => {
+                toast.success('Applied current background, format, and styling to all images in queue');
+              }}
+              title="Apply these background and format settings to all images in the queue"
+              className="w-full h-8 px-3 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--background)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <Check className="w-3 h-3 text-[var(--text-muted)]" />
+              <span>Apply settings to all images in batch</span>
+            </button>
+          </div>
         </div>
 
-        {/* Live Styled Preview Column */}
-        <div className="lg:col-span-2 flex flex-col items-center justify-center">
+        {/* Live Canvas Preview Column */}
+        <div className="w-full lg:w-1/2 flex flex-col items-center justify-center">
           <div
-            className={`relative w-full aspect-square max-h-[460px] rounded-2xl border border-zinc-800 flex items-center justify-center overflow-hidden ${
-              settings.backgroundType === 'transparent' ? 'checkerboard-bg' : ''
+            className={`w-full aspect-square max-h-[360px] rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden ${
+              settings.backgroundType === 'transparent' ? 'checkerboard-pattern' : ''
             }`}
             style={{
               backgroundColor:
@@ -342,12 +372,8 @@ export function Editor({ item, settings, onUpdateSettings }: EditorProps) {
             />
           </div>
 
-          <div className="mt-3 flex items-center gap-3 text-xs text-zinc-400">
-            <span>
-              Export dimensions: {item.originalWidth || 800} × {item.originalHeight || 800} px
-            </span>
-            <span>•</span>
-            <span className="text-emerald-400 font-medium">100% Original Resolution</span>
+          <div className="mt-2 text-[11px] text-[var(--text-muted)] font-mono text-center">
+            {item.originalWidth || 800} × {item.originalHeight || 800} px · Original resolution
           </div>
         </div>
       </div>

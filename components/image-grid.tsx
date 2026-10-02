@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { QueueItem } from '@/types/image';
+import { QueueItem, EditorSettings } from '@/types/image';
 import { ImageCard } from './image-card';
-import { Trash2, Play, Square, Sparkles } from 'lucide-react';
-import { MAX_BATCH_SIZE } from '@/lib/queue/image-queue';
+import { Trash2, Square } from 'lucide-react';
+import { DownloadButton } from './download-button';
 
 interface ImageGridProps {
   items: QueueItem[];
@@ -16,6 +16,7 @@ interface ImageGridProps {
   onProcess: () => void;
   onCancel: () => void;
   isProcessing: boolean;
+  settings?: EditorSettings;
 }
 
 export function ImageGrid({
@@ -28,69 +29,75 @@ export function ImageGrid({
   onProcess,
   onCancel,
   isProcessing,
+  settings,
 }: ImageGridProps) {
   if (items.length === 0) return null;
 
   const waitingCount = items.filter((i) => i.status === 'waiting').length;
   const completedCount = items.filter((i) => i.status === 'completed').length;
-  const failedCount = items.filter((i) => i.status === 'failed').length;
 
   return (
-    <div className="w-full mt-6">
-      {/* Queue Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
+    <section className="w-full mt-10">
+      {/* Selected Images Section Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-zinc-100">
+          <h2 className="text-base sm:text-lg font-semibold text-[var(--text-primary)]">
             Selected Images
           </h2>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono">
-            {items.length} / {MAX_BATCH_SIZE}
+          <span className="text-xs text-[var(--text-muted)] font-mono">
+            {items.length} {items.length === 1 ? 'image' : 'images'}
           </span>
           {completedCount > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/40">
-              {completedCount} Done
-            </span>
-          )}
-          {failedCount > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-red-950/70 text-red-400 border border-red-800/40">
-              {failedCount} Failed
+            <span className="text-xs text-[var(--text-secondary)] font-mono">
+              · {completedCount} ready
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Download all completed images button */}
+          {completedCount > 0 && settings && (
+            <DownloadButton
+              items={items}
+              settings={settings}
+              disabled={isProcessing}
+            />
+          )}
+
           {/* Action buttons */}
           {isProcessing ? (
             <button
               onClick={onCancel}
-              className="px-3.5 py-1.5 rounded-xl bg-red-950 hover:bg-red-900 border border-red-800/60 text-red-200 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
               <Square className="w-3.5 h-3.5" />
-              Stop Processing
+              <span>Stop</span>
             </button>
           ) : waitingCount > 0 ? (
             <button
               onClick={onProcess}
-              className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+              className="px-4 py-1.5 rounded-md bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-90 text-xs font-medium flex items-center gap-1.5 transition-opacity"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Process {waitingCount} {waitingCount === 1 ? 'Image' : 'Images'}
+              <span>Process {waitingCount} {waitingCount === 1 ? 'image' : 'images'}</span>
             </button>
           ) : null}
 
+          {/* Destructive Clear All Button with subtle red on hover */}
           <button
             onClick={onClear}
             disabled={isProcessing}
             title="Clear all images"
-            className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
+            aria-label="Clear all images"
+            className="px-2.5 py-1.5 rounded-md text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-40"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+      {/* Responsive Grid: 4 columns desktop, 3 columns tablet, 2 columns mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {items.map((item) => (
           <ImageCard
             key={item.id}
@@ -103,6 +110,6 @@ export function ImageGrid({
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 }

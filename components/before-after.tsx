@@ -1,29 +1,20 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback, MouseEvent, TouchEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, MouseEvent } from 'react';
 import { QueueItem } from '@/types/image';
-import {
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Split,
-  Columns,
-  Layers,
-  Sparkles,
-  Info,
-} from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 
 interface BeforeAfterProps {
   item: QueueItem;
 }
 
-type ViewMode = 'slider' | 'side-by-side' | 'mask';
+type ViewMode = 'split' | 'side-by-side' | 'before' | 'after' | 'mask';
 
 export function BeforeAfter({ item }: BeforeAfterProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('slider');
-  const [sliderPos, setSliderPos] = useState(50); // percentage 0 to 100
-  const [zoomLevel, setZoomLevel] = useState(1); // 1x to 4x
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [sliderPos, setSliderPos] = useState(50);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -31,14 +22,12 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingSlider = useRef(false);
 
-  // Reset zoom and pan when item changes
   useEffect(() => {
     setZoomLevel(1);
     setPanOffset({ x: 0, y: 0 });
     setSliderPos(50);
   }, [item.id]);
 
-  // Handle slider movement
   const handleSliderMove = useCallback((clientX: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -87,7 +76,6 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
     };
   }, [handleSliderMove]);
 
-  // Pan handling when zoomed in
   const onMouseDownPan = (e: MouseEvent) => {
     if (zoomLevel > 1 && !isDraggingSlider.current) {
       setIsPanning(true);
@@ -126,88 +114,121 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
   const hasResult = Boolean(item.resultUrl);
 
   return (
-    <div className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col">
-      {/* Top Header / Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-zinc-950/60 border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-zinc-100 truncate max-w-[200px] sm:max-w-xs">
+    <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl sm:rounded-2xl overflow-hidden flex flex-col transition-colors">
+      {/* Workspace Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--background)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)] truncate max-w-[200px] sm:max-w-xs">
             {item.name}
           </span>
+          {item.originalWidth && item.originalHeight && (
+            <span className="text-[11px] text-[var(--text-muted)] font-mono hidden sm:inline">
+              ({item.originalWidth} × {item.originalHeight})
+            </span>
+          )}
           {item.durationMs && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
-              Processed in {formatDuration(item.durationMs)}
+            <span className="text-[11px] text-[var(--text-muted)] font-mono">
+              · {formatDuration(item.durationMs)}
             </span>
           )}
         </div>
 
-        {/* View mode toggle & zoom controls */}
+        {/* View mode toggle + Zoom controls */}
         <div className="flex items-center gap-2">
           {hasResult && (
-            <div className="flex items-center rounded-xl bg-zinc-800/80 p-0.5 border border-zinc-700/60 text-xs">
+            <div className="flex items-center rounded-md border border-[var(--border)] p-0.5 text-xs bg-[var(--surface)]">
               <button
-                onClick={() => setViewMode('slider')}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
-                  viewMode === 'slider'
-                    ? 'bg-indigo-600 text-white font-medium'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                type="button"
+                onClick={() => setViewMode('split')}
+                className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                  viewMode === 'split'
+                    ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] font-medium'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                <Split className="w-3.5 h-3.5" />
-                Slider
+                Split
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('side-by-side')}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
+                className={`px-2.5 py-1 rounded text-xs transition-colors ${
                   viewMode === 'side-by-side'
-                    ? 'bg-indigo-600 text-white font-medium'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] font-medium'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                <Columns className="w-3.5 h-3.5" />
                 Side by Side
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('before')}
+                className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                  viewMode === 'before'
+                    ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] font-medium'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Before
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('after')}
+                className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                  viewMode === 'after'
+                    ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] font-medium'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                After
               </button>
               {item.maskUrl && (
                 <button
+                  type="button"
                   onClick={() => setViewMode('mask')}
-                  className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
+                  className={`px-2.5 py-1 rounded text-xs transition-colors ${
                     viewMode === 'mask'
-                      ? 'bg-indigo-600 text-white font-medium'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)] font-medium'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
                   Mask
                 </button>
               )}
             </div>
           )}
 
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-1 bg-zinc-800/80 rounded-xl p-0.5 border border-zinc-700/60">
+          {/* Minimal Zoom Controls */}
+          <div className="flex items-center rounded-md border border-[var(--border)] p-0.5 text-xs bg-[var(--surface)]">
             <button
+              type="button"
               onClick={() => handleZoom(-0.5)}
               disabled={zoomLevel <= 1}
               title="Zoom out"
-              className="p-1 rounded text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+              aria-label="Zoom out"
+              className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-30"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] font-mono px-1.5 text-zinc-300 min-w-8 text-center">
+            <span className="text-[11px] font-mono px-1.5 text-[var(--text-primary)] min-w-[28px] text-center">
               {zoomLevel}x
             </span>
             <button
+              type="button"
               onClick={() => handleZoom(0.5)}
               disabled={zoomLevel >= 4}
-              title="Zoom in (inspect edges)"
-              className="p-1 rounded text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+              title="Zoom in"
+              aria-label="Zoom in"
+              className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-30"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             {zoomLevel > 1 && (
               <button
+                type="button"
                 onClick={resetZoom}
                 title="Reset zoom"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-200"
+                aria-label="Reset zoom"
+                className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
@@ -216,17 +237,16 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
         </div>
       </div>
 
-      {/* Main Display Area */}
+      {/* Large Image Canvas */}
       <div
         ref={containerRef}
         onMouseDown={onMouseDownPan}
         onMouseMove={onMouseMovePan}
         onMouseUp={onMouseUpPan}
-        className={`relative w-full h-[380px] sm:h-[460px] md:h-[520px] select-none overflow-hidden ${
+        className={`relative w-full h-[360px] sm:h-[440px] md:h-[480px] select-none overflow-hidden ${
           zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
       >
-        {/* Transform wrapper for Zoom and Pan */}
         <div
           className="w-full h-full flex items-center justify-center transition-transform duration-75"
           style={{
@@ -234,25 +254,25 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
             transformOrigin: 'center center',
           }}
         >
-          {/* 1. SLIDER COMPARISON MODE */}
-          {hasResult && viewMode === 'slider' && (
-            <div className="relative w-full h-full max-w-4xl flex items-center justify-center p-4">
-              {/* Background Layer: Cutout with Checkerboard */}
-              <div className="absolute inset-4 checkerboard-bg rounded-xl overflow-hidden flex items-center justify-center">
+          {/* 1. SPLIT COMPARISON SLIDER */}
+          {hasResult && viewMode === 'split' && (
+            <div className="relative w-full h-full flex items-center justify-center p-4">
+              {/* Result background layer (checkerboard) */}
+              <div className="absolute inset-4 checkerboard-pattern rounded-lg overflow-hidden flex items-center justify-center border border-[var(--border)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.resultUrl}
-                  alt="Background removed result"
+                  alt="Result background removed"
                   className="max-h-full max-w-full object-contain pointer-events-none"
                 />
-                <span className="absolute bottom-3 right-3 text-[11px] font-semibold px-2 py-1 rounded bg-black/75 text-emerald-400 border border-emerald-500/30 backdrop-blur pointer-events-none">
-                  AI Cutout
+                <span className="absolute bottom-3 right-3 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)] pointer-events-none">
+                  After
                 </span>
               </div>
 
-              {/* Foreground Layer: Original clipped by slider */}
+              {/* Original foreground layer (clipped by slider) */}
               <div
-                className="absolute inset-4 bg-zinc-950 rounded-xl overflow-hidden flex items-center justify-center"
+                className="absolute inset-4 bg-[var(--background)] rounded-lg overflow-hidden flex items-center justify-center border border-[var(--border)]"
                 style={{
                   clipPath: `polygon(0 0, ${sliderPos}% 0, ${sliderPos}% 100%, 0 100%)`,
                 }}
@@ -260,97 +280,121 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.originalUrl}
-                  alt="Original product image"
+                  alt="Original"
                   className="max-h-full max-w-full object-contain pointer-events-none"
                 />
-                <span className="absolute bottom-3 left-3 text-[11px] font-semibold px-2 py-1 rounded bg-black/75 text-zinc-300 border border-zinc-700/60 backdrop-blur pointer-events-none">
-                  Original
+                <span className="absolute bottom-3 left-3 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)] pointer-events-none">
+                  Before
                 </span>
               </div>
 
-              {/* Slider Line & Handle */}
+              {/* Draggable Divider Line & Minimal Handle */}
               <div
                 onMouseDown={onMouseDownSlider}
                 onTouchStart={onTouchStartSlider}
-                className="absolute top-4 bottom-4 w-1 bg-white cursor-ew-resize z-20 shadow-2xl flex items-center justify-center -ml-0.5"
+                className="absolute top-4 bottom-4 w-px bg-[var(--text-primary)] cursor-ew-resize z-20 flex items-center justify-center"
                 style={{ left: `${sliderPos}%` }}
               >
-                <div className="w-8 h-8 rounded-full bg-white text-zinc-900 shadow-xl border border-zinc-200 flex items-center justify-center font-bold text-xs pointer-events-auto hover:scale-110 active:scale-95 transition-transform">
+                <div className="w-6 h-6 rounded-full bg-[var(--background)] text-[var(--text-primary)] border border-[var(--border-strong)] flex items-center justify-center text-[10px] pointer-events-auto hover:scale-105 active:scale-95 transition-transform shadow-none">
                   ⇄
                 </div>
               </div>
             </div>
           )}
 
-          {/* 2. SIDE-BY-SIDE MODE */}
+          {/* 2. SIDE BY SIDE MODE */}
           {hasResult && viewMode === 'side-by-side' && (
             <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-              {/* Original */}
-              <div className="relative w-full h-full bg-zinc-950 rounded-xl border border-zinc-800 flex items-center justify-center overflow-hidden">
+              <div className="relative w-full h-full bg-[var(--background)] rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.originalUrl}
                   alt="Original"
                   className="max-h-full max-w-full object-contain p-2"
                 />
-                <span className="absolute bottom-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded bg-black/70 text-zinc-300 border border-zinc-700/50">
-                  Original
+                <span className="absolute bottom-2 left-2 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)]">
+                  Before
                 </span>
               </div>
 
-              {/* Result */}
-              <div className="relative w-full h-full checkerboard-bg rounded-xl border border-zinc-800 flex items-center justify-center overflow-hidden">
+              <div className="relative w-full h-full checkerboard-pattern rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.resultUrl}
                   alt="Result"
                   className="max-h-full max-w-full object-contain p-2"
                 />
-                <span className="absolute bottom-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded bg-black/70 text-emerald-400 border border-emerald-500/30">
-                  Cutout (Transparent)
+                <span className="absolute bottom-2 right-2 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)]">
+                  After
                 </span>
               </div>
             </div>
           )}
 
-          {/* 3. MASK MATTE MODE */}
+          {/* 3. BEFORE ONLY MODE */}
+          {hasResult && viewMode === 'before' && (
+            <div className="w-full h-full p-4 flex items-center justify-center">
+              <div className="relative w-full h-full bg-[var(--background)] rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.originalUrl}
+                  alt="Before"
+                  className="max-h-full max-w-full object-contain p-2"
+                />
+                <span className="absolute bottom-2 left-2 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)]">
+                  Before
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 4. AFTER ONLY MODE */}
+          {hasResult && viewMode === 'after' && (
+            <div className="w-full h-full p-4 flex items-center justify-center">
+              <div className="relative w-full h-full checkerboard-pattern rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.resultUrl}
+                  alt="After"
+                  className="max-h-full max-w-full object-contain p-2"
+                />
+                <span className="absolute bottom-2 right-2 text-[11px] font-mono px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-primary)]">
+                  After
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 5. MASK MATTE MODE */}
           {hasResult && viewMode === 'mask' && item.maskUrl && (
-            <div className="relative w-full h-full bg-black rounded-xl p-4 flex items-center justify-center">
+            <div className="relative w-full h-full bg-black rounded-lg p-4 flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.maskUrl}
-                alt="Alpha segmentation matte"
+                alt="Alpha mask"
                 className="max-h-full max-w-full object-contain p-2"
               />
-              <span className="absolute bottom-6 left-6 text-[11px] font-semibold px-2.5 py-1 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-700">
-                Calculated Alpha Mask (White = Keep, Black = Cut)
+              <span className="absolute bottom-3 left-3 text-[11px] font-mono px-2 py-0.5 rounded border border-zinc-800 bg-zinc-950 text-zinc-300">
+                Alpha Mask
               </span>
             </div>
           )}
 
-          {/* Fallback if result not yet completed */}
+          {/* Waiting/Processing fallback */}
           {!hasResult && (
-            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 p-6">
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.originalUrl}
                 alt={item.name}
-                className="max-h-72 object-contain rounded-xl border border-zinc-800 mb-4"
+                className="max-h-64 object-contain rounded-lg border border-[var(--border)] mb-3 bg-[var(--background)]"
               />
-              <p className="text-sm font-medium text-zinc-300">
+              <p className="text-xs text-[var(--text-secondary)]">
                 Click &apos;Process&apos; to remove the background
               </p>
             </div>
           )}
         </div>
-
-        {/* Edge inspection helper badge */}
-        {zoomLevel > 1 && (
-          <div className="absolute top-3 left-3 bg-black/80 backdrop-blur px-2.5 py-1 rounded-lg border border-zinc-700/60 text-[11px] text-zinc-300 flex items-center gap-1.5 z-20">
-            <Info className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Click & drag to inspect edges</span>
-          </div>
-        )}
       </div>
     </div>
   );

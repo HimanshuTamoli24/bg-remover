@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '@/components/header';
 import { UploadZone } from '@/components/upload-zone';
 import { ImageGrid } from '@/components/image-grid';
@@ -11,26 +11,14 @@ import { DownloadButton } from '@/components/download-button';
 import {
   imageQueue,
   QueueState,
-  MAX_BATCH_SIZE,
 } from '@/lib/queue/image-queue';
 import {
-  QueueItem,
   EditorSettings,
   DEFAULT_EDITOR_SETTINGS,
   ModelProgressEvent,
 } from '@/types/image';
-import { SAMPLE_PRODUCTS } from '@/lib/sample-images';
 import { getBackgroundRemover } from '@/lib/image-processing/model';
-import {
-  Sparkles,
-  Layers,
-  ShieldCheck,
-  CheckCircle2,
-  ArrowRight,
-  RefreshCw,
-  Sliders,
-  Image as ImageIcon,
-} from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Home() {
   const [queueState, setQueueState] = useState<QueueState>({
@@ -47,7 +35,9 @@ export default function Home() {
   const [activeModelId, setActiveModelId] = useState('rmbg-1.4');
   const [activeDevice, setActiveDevice] = useState<'webgpu' | 'wasm' | 'cpu'>('wasm');
   const [isPreloadingModel, setIsPreloadingModel] = useState(false);
-  const [sampleLoading, setSampleLoading] = useState<string | null>(null);
+
+  // Ref to smoothly scroll to image section upon upload
+  const imageSectionRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to ImageQueue state updates
   useEffect(() => {
@@ -70,6 +60,7 @@ export default function Home() {
   const handleModelChange = (newModelId: string) => {
     setActiveModelId(newModelId);
     imageQueue.setModel(newModelId);
+    toast(`Switched AI model to ${newModelId}`);
   };
 
   // Pre-initialize model with progress callback
@@ -86,17 +77,28 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to initialize AI model:', err);
+      toast.error('Failed to load AI model weights');
     } finally {
       setIsPreloadingModel(false);
     }
   }, [activeModelId]);
 
-  // Add files to queue
+  // Add files to queue, toast, and scroll to image section
   const handleFilesSelected = useCallback(async (files: File[]) => {
     try {
       await imageQueue.addFiles(files);
+      toast.success(`Uploaded ${files.length} image${files.length > 1 ? 's' : ''}`);
+
+      // Smoothly scroll down to the image section
+      setTimeout(() => {
+        imageSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 150);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Could not add images');
+      const message = err instanceof Error ? err.message : 'Could not add images';
+      toast.error(message);
     }
   }, []);
 
@@ -106,7 +108,7 @@ export default function Home() {
 
     try {
       if (!navigator.clipboard || !navigator.clipboard.read) {
-        alert('Please press Ctrl+V (or ⌘V) directly on the page to paste your copied image.');
+        toast.info('Press Ctrl+V (or ⌘V) directly on the page to paste');
         return;
       }
 
@@ -128,18 +130,18 @@ export default function Home() {
       if (imageFiles.length > 0) {
         handleFilesSelected(imageFiles);
       } else {
-        alert('No image found in your clipboard. Please copy an image (or take a screenshot) and try again!');
+        toast.info('No image found in clipboard. Copy an image first.');
       }
     } catch (err) {
       console.warn('Clipboard read permission or API error:', err);
-      alert('Could not access clipboard directly. Please press Ctrl + V (or ⌘V) to paste the image directly.');
+      toast.info('Press Ctrl+V (or ⌘V) to paste the image directly');
     }
   }, [handleFilesSelected]);
 
   // Global window paste listener: Users can press Ctrl+V anywhere
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      // Don't intercept if user is typing in a text/color input
+      // Don't intercept if user is typing in a text input
       if (
         document.activeElement instanceof HTMLInputElement &&
         document.activeElement.type === 'text'
@@ -177,39 +179,21 @@ export default function Home() {
     };
   }, [handleFilesSelected]);
 
-  // Load sample product
-  const handleLoadSample = async (sampleId: string) => {
-    const sample = SAMPLE_PRODUCTS.find((s) => s.id === sampleId);
-    if (!sample) return;
-
-    if (queueState.items.length >= MAX_BATCH_SIZE) {
-      alert(`Maximum ${MAX_BATCH_SIZE} images per batch reached.`);
-      return;
-    }
-
-    setSampleLoading(sampleId);
-    try {
-      const file = await sample.generate();
-      await imageQueue.addFiles([file]);
-    } catch (err) {
-      console.error('Failed to load sample image:', err);
-    } finally {
-      setSampleLoading(null);
-    }
-  };
-
-  // Start batch processing
+  // Queue actions
   const handleStartProcessing = async () => {
+    toast.info('Starting background removal…');
     await ensureModelReady();
     imageQueue.processQueue();
   };
 
   const handleCancelProcessing = () => {
     imageQueue.cancel();
+    toast('Processing stopped');
   };
 
   const handleRemoveItem = (id: string) => {
     imageQueue.removeItem(id);
+    toast('Image removed');
   };
 
   const handleRetryItem = (id: string) => {
@@ -219,111 +203,80 @@ export default function Home() {
   const handleClearAll = () => {
     imageQueue.clear();
     setSelectedItemId(null);
+    toast('Queue cleared');
   };
 
   const selectedItem =
     queueState.items.find((i) => i.id === selectedItemId) || queueState.items[0] || null;
 
-  const completedItems = queueState.items.filter((i) => i.status === 'completed');
-
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col antialiased">
-      {/* Top Header */}
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col antialiased transition-colors">
+      {/* 1. Minimal Header */}
       <Header
         activeModelId={activeModelId}
         onSelectModel={handleModelChange}
         disabled={queueState.isProcessing}
       />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 md:py-12">
-        {/* Hero Section */}
-        <div className="text-center max-w-2xl mx-auto mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold mb-4">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>High-Accuracy E-Commerce Segmentation</span>
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-3">
+      <main className="flex-1 w-full max-w-[1100px] mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-20 flex flex-col">
+        {/* 2. Centered Hero Section (Directly on page background) */}
+        <section className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-[var(--text-primary)] leading-[1.15]">
             Remove Product Backgrounds <br className="hidden sm:inline" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-300 to-indigo-200">
-              Directly in Your Browser
-            </span>
+            Directly in Your Browser
           </h1>
 
-          <p className="text-sm sm:text-base text-zinc-400 leading-relaxed">
-            Clean, professional product photos for your store. <br className="hidden sm:inline" />
-            <strong className="text-zinc-200">No server uploads. No accounts. 100% client-side privacy.</strong>
+          <p className="mt-3.5 text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed max-w-lg mx-auto">
+            Clean product photos directly in your browser. <br className="hidden sm:inline" />
+            No server uploads. No accounts. Your images stay on your device.
           </p>
-        </div>
+        </section>
 
-        {/* Upload Area */}
-        <div className="max-w-3xl mx-auto">
+        {/* 3. Upload Workspace */}
+        <section className="w-full">
           <UploadZone
             currentCount={queueState.items.length}
             onFilesSelected={handleFilesSelected}
             onPasteFromClipboard={handlePasteFromClipboard}
             disabled={queueState.isProcessing}
           />
+        </section>
 
-          {/* Sample Product Cards for Instant 1-Click Testing */}
-          {queueState.items.length < MAX_BATCH_SIZE && (
-            <div className="mt-6 pt-6 border-t border-zinc-900 text-center">
-              <p className="text-xs text-zinc-400 mb-3 font-medium">
-                Don&apos;t have a product photo on hand? Try an instant e-commerce sample:
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-2.5">
-                {SAMPLE_PRODUCTS.map((sample) => (
-                  <button
-                    key={sample.id}
-                    onClick={() => handleLoadSample(sample.id)}
-                    disabled={sampleLoading === sample.id}
-                    className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300 flex items-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                    <span>{sample.type}</span>
-                    <span className="text-[10px] text-zinc-400">({sample.category})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* 4. Processing Progress (Only shows when preparing model or processing) */}
+        <ProcessingProgress
+          items={queueState.items}
+          isProcessing={queueState.isProcessing || isPreloadingModel}
+          currentItemId={queueState.currentItemId}
+          modelProgress={modelProgress}
+          activeDevice={activeDevice}
+        />
 
-        {/* First-load Model Loading Progress Banner & Batch Queue Progress */}
-        <div className="max-w-4xl mx-auto">
-          <ProcessingProgress
+        {/* 5. Selected Images Section (with ref for smooth auto-scroll upon upload) */}
+        <div ref={imageSectionRef} className="scroll-mt-20">
+          <ImageGrid
             items={queueState.items}
-            isProcessing={queueState.isProcessing || isPreloadingModel}
-            currentItemId={queueState.currentItemId}
-            modelProgress={modelProgress}
-            activeDevice={activeDevice}
+            selectedItem={selectedItem}
+            onSelect={(item) => setSelectedItemId(item.id)}
+            onRemove={handleRemoveItem}
+            onRetry={handleRetryItem}
+            onClear={handleClearAll}
+            onProcess={handleStartProcessing}
+            onCancel={handleCancelProcessing}
+            isProcessing={queueState.isProcessing}
+            settings={editorSettings}
           />
         </div>
 
-        {/* Queue Items Grid */}
-        <ImageGrid
-          items={queueState.items}
-          selectedItem={selectedItem}
-          onSelect={(item) => setSelectedItemId(item.id)}
-          onRemove={handleRemoveItem}
-          onRetry={handleRetryItem}
-          onClear={handleClearAll}
-          onProcess={handleStartProcessing}
-          onCancel={handleCancelProcessing}
-          isProcessing={queueState.isProcessing}
-        />
-
-        {/* Selected Item Inspection & Editor */}
+        {/* 6. Image Workspace (Before / After Preview & Controls) */}
         {selectedItem && (
-          <div className="mt-10 pt-8 border-t border-zinc-800/80">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <section className="mt-12 pt-8 border-t border-[var(--border)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-indigo-400" />
-                  Inspect & Refine Cutout
-                </h2>
-                <p className="text-xs text-zinc-400">
-                  Inspect edges, compare against original photo, and apply custom e-commerce styling
+                <h3 className="text-base sm:text-lg font-semibold text-[var(--text-primary)]">
+                  Preview & Export
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Inspect edges and adjust export styling
                 </p>
               </div>
 
@@ -335,10 +288,10 @@ export default function Home() {
               />
             </div>
 
-            {/* Before / After Viewer */}
+            {/* Before / After Split Workspace */}
             <BeforeAfter item={selectedItem} />
 
-            {/* Styling Toolbar (Background, Positioning, Padding, Realistic Shadow) */}
+            {/* Controls (Background, Format, Positioning, Shadow, Export) */}
             {selectedItem.status === 'completed' && (
               <Editor
                 item={selectedItem}
@@ -346,47 +299,14 @@ export default function Home() {
                 onUpdateSettings={setEditorSettings}
               />
             )}
-          </div>
+          </section>
         )}
-
-        {/* Feature Highlights Footer */}
-        <div className="mt-16 pt-10 border-t border-zinc-900 grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-zinc-400">
-          <div className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
-            <div className="flex items-center gap-2 text-zinc-200 font-semibold mb-1">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Client-Side Only
-            </div>
-            <p className="leading-relaxed">
-              Your images never leave your computer. Model inference executes directly in your browser via WebGPU/WebAssembly.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
-            <div className="flex items-center gap-2 text-zinc-200 font-semibold mb-1">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-              Original Resolution Preserved
-            </div>
-            <p className="leading-relaxed">
-              The AI segmentation mask is mapped back to the 100% original full-resolution image with sub-pixel edge defringing.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
-            <div className="flex items-center gap-2 text-zinc-200 font-semibold mb-1">
-              <CheckCircle2 className="w-4 h-4 text-teal-400" />
-              Batch Processing & ZIP
-            </div>
-            <p className="leading-relaxed">
-              Queue up to 10 product photos at once. Download individual transparent PNGs or batch export everything as a ZIP.
-            </p>
-          </div>
-        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="w-full border-t border-zinc-900 bg-zinc-950 py-6 text-center text-xs text-zinc-400">
+      {/* 7. Minimal Clean Footer */}
+      <footer className="w-full border-t border-[var(--border)] py-6 text-center text-xs text-[var(--text-muted)] bg-[var(--background)]">
         <p>
-          CutoutStudio • Browser-Based E-Commerce Background Remover • Built with Next.js & Transformers.js
+          RemoveBG • Browser-based product background remover • 100% client-side
         </p>
       </footer>
     </div>
