@@ -1,25 +1,22 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Header } from '@/components/header';
-import { UploadZone } from '@/components/upload-zone';
-import { ImageGrid } from '@/components/image-grid';
-import { ProcessingProgress } from '@/components/processing-progress';
-import { BeforeAfter } from '@/components/before-after';
-import { ImageCarousel } from '@/components/image-carousel';
-import { Editor } from '@/components/editor';
-import { DownloadButton } from '@/components/download-button';
-import {
-  imageQueue,
-  QueueState,
-} from '@/lib/queue/image-queue';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Header } from "@/components/header";
+import { UploadZone } from "@/components/upload-zone";
+import { ProcessingProgress } from "@/components/processing-progress";
+import { BeforeAfter } from "@/components/before-after";
+import { ImageCarousel } from "@/components/image-carousel";
+import { Editor } from "@/components/editor";
+import { DownloadButton } from "@/components/download-button";
+import { imageQueue, QueueState } from "@/lib/queue/image-queue";
 import {
   EditorSettings,
   DEFAULT_EDITOR_SETTINGS,
   ModelProgressEvent,
-} from '@/types/image';
-import { getBackgroundRemover } from '@/lib/image-processing/model';
-import { toast } from 'sonner';
+} from "@/types/image";
+import { getBackgroundRemover } from "@/lib/image-processing/model";
+import { toast } from "sonner";
+import { Square, Trash2 } from "lucide-react";
 
 export default function Home() {
   const [queueState, setQueueState] = useState<QueueState>({
@@ -31,14 +28,20 @@ export default function Home() {
   });
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
-  const [modelProgress, setModelProgress] = useState<ModelProgressEvent | null>(null);
-  const [activeModelId, setActiveModelId] = useState('rmbg-1.4');
-  const [activeDevice, setActiveDevice] = useState<'webgpu' | 'wasm' | 'cpu'>('wasm');
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(
+    DEFAULT_EDITOR_SETTINGS,
+  );
+  const [modelProgress, setModelProgress] = useState<ModelProgressEvent | null>(
+    null,
+  );
+  const [activeModelId, setActiveModelId] = useState("rmbg-1.4");
+  const [activeDevice, setActiveDevice] = useState<"webgpu" | "wasm" | "cpu">(
+    "wasm",
+  );
   const [isPreloadingModel, setIsPreloadingModel] = useState(false);
 
-  // Ref to smoothly scroll to image section upon upload
-  const imageSectionRef = useRef<HTMLDivElement>(null);
+  // Ref to smoothly scroll to image workspace upon upload
+  const workspaceSectionRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to ImageQueue state updates
   useEffect(() => {
@@ -77,39 +80,42 @@ export default function Home() {
         setActiveDevice(remover.device);
       }
     } catch (err) {
-      console.error('Failed to initialize AI model:', err);
-      toast.error('Failed to load AI model weights');
+      console.error("Failed to initialize AI model:", err);
+      toast.error("Failed to load AI model weights");
     } finally {
       setIsPreloadingModel(false);
     }
   }, [activeModelId]);
 
-  // Add files to queue, toast, and scroll to image section
+  // Add files to queue, toast, and scroll to preview workspace
   const handleFilesSelected = useCallback(async (files: File[]) => {
     try {
       await imageQueue.addFiles(files);
-      toast.success(`Uploaded ${files.length} image${files.length > 1 ? 's' : ''}`);
+      toast.success(
+        `Uploaded ${files.length} image${files.length > 1 ? "s" : ""}`,
+      );
 
-      // Smoothly scroll down to the image section
+      // Smoothly scroll down to the preview workspace
       setTimeout(() => {
-        imageSectionRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
+        workspaceSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
         });
       }, 150);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Could not add images';
+      const message =
+        err instanceof Error ? err.message : "Could not add images";
       toast.error(message);
     }
   }, []);
 
   // Dedicated button paste handler using modern Clipboard API
   const handlePasteFromClipboard = useCallback(async () => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     try {
       if (!navigator.clipboard || !navigator.clipboard.read) {
-        toast.info('Press Ctrl+V (or ⌘V) directly on the page to paste');
+        toast.info("Press Ctrl+V (or ⌘V) directly on the page to paste");
         return;
       }
 
@@ -117,13 +123,17 @@ export default function Home() {
       const imageFiles: File[] = [];
 
       for (const item of clipboardItems) {
-        const imageType = item.types.find((t) => t.startsWith('image/'));
+        const imageType = item.types.find((t) => t.startsWith("image/"));
         if (imageType) {
           const blob = await item.getType(imageType);
-          const ext = imageType.split('/')[1] || 'png';
-          const file = new File([blob], `clipboard-image-${Date.now()}.${ext}`, {
-            type: imageType,
-          });
+          const ext = imageType.split("/")[1] || "png";
+          const file = new File(
+            [blob],
+            `clipboard-image-${Date.now()}.${ext}`,
+            {
+              type: imageType,
+            },
+          );
           imageFiles.push(file);
         }
       }
@@ -131,21 +141,20 @@ export default function Home() {
       if (imageFiles.length > 0) {
         handleFilesSelected(imageFiles);
       } else {
-        toast.info('No image found in clipboard. Copy an image first.');
+        toast.info("No image found in clipboard. Copy an image first.");
       }
     } catch (err) {
-      console.warn('Clipboard read permission or API error:', err);
-      toast.info('Press Ctrl+V (or ⌘V) to paste the image directly');
+      console.warn("Clipboard read permission or API error:", err);
+      toast.info("Press Ctrl+V (or ⌘V) to paste the image directly");
     }
   }, [handleFilesSelected]);
 
   // Global window paste listener: Users can press Ctrl+V anywhere
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      // Don't intercept if user is typing in a text input
       if (
         document.activeElement instanceof HTMLInputElement &&
-        document.activeElement.type === 'text'
+        document.activeElement.type === "text"
       ) {
         return;
       }
@@ -156,13 +165,17 @@ export default function Home() {
       const imageFiles: File[] = [];
 
       for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image/')) {
+        if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
           if (file) {
-            const ext = file.type.split('/')[1] || 'png';
-            const namedFile = new File([file], `pasted-image-${Date.now()}.${ext}`, {
-              type: file.type || 'image/png',
-            });
+            const ext = file.type.split("/")[1] || "png";
+            const namedFile = new File(
+              [file],
+              `pasted-image-${Date.now()}.${ext}`,
+              {
+                type: file.type || "image/png",
+              },
+            );
             imageFiles.push(namedFile);
           }
         }
@@ -174,41 +187,46 @@ export default function Home() {
       }
     };
 
-    window.addEventListener('paste', handleGlobalPaste);
+    window.addEventListener("paste", handleGlobalPaste);
     return () => {
-      window.removeEventListener('paste', handleGlobalPaste);
+      window.removeEventListener("paste", handleGlobalPaste);
     };
   }, [handleFilesSelected]);
 
   // Queue actions
   const handleStartProcessing = async () => {
-    toast.info('Starting background removal…');
+    toast.info("Starting background removal…");
     await ensureModelReady();
     imageQueue.processQueue();
   };
 
   const handleCancelProcessing = () => {
     imageQueue.cancel();
-    toast('Processing stopped');
+    toast("Processing stopped");
   };
 
   const handleRemoveItem = (id: string) => {
     imageQueue.removeItem(id);
-    toast('Image removed');
-  };
-
-  const handleRetryItem = (id: string) => {
-    imageQueue.retryItem(id);
+    toast("Image removed");
   };
 
   const handleClearAll = () => {
     imageQueue.clear();
     setSelectedItemId(null);
-    toast('Queue cleared');
+    toast("Queue cleared");
   };
 
   const selectedItem =
-    queueState.items.find((i) => i.id === selectedItemId) || queueState.items[0] || null;
+    queueState.items.find((i) => i.id === selectedItemId) ||
+    queueState.items[0] ||
+    null;
+
+  const waitingCount = queueState.items.filter(
+    (i) => i.status === "waiting",
+  ).length;
+  const completedCount = queueState.items.filter(
+    (i) => i.status === "completed",
+  ).length;
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col antialiased transition-colors">
@@ -228,7 +246,8 @@ export default function Home() {
           </h1>
 
           <p className="mt-3.5 text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed max-w-lg mx-auto">
-            Clean product photos directly in your browser. <br className="hidden sm:inline" />
+            Clean product photos directly in your browser.{" "}
+            <br className="hidden sm:inline" />
             No server uploads. No accounts. Your images stay on your device.
           </p>
         </section>
@@ -252,41 +271,67 @@ export default function Home() {
           activeDevice={activeDevice}
         />
 
-        {/* 5. Selected Images Section (with ref for smooth auto-scroll upon upload) */}
-        <div ref={imageSectionRef} className="scroll-mt-20">
-          <ImageGrid
-            items={queueState.items}
-            selectedItem={selectedItem}
-            onSelect={(item) => setSelectedItemId(item.id)}
-            onRemove={handleRemoveItem}
-            onRetry={handleRetryItem}
-            onClear={handleClearAll}
-            onProcess={handleStartProcessing}
-            onCancel={handleCancelProcessing}
-            isProcessing={queueState.isProcessing}
-            settings={editorSettings}
-          />
-        </div>
-
-        {/* 6. Image Workspace (Before / After Preview & Controls) */}
+        {/* 5. Main Image Workspace & Carousel (Directly connects to preview, no redundant grid) */}
         {selectedItem && (
-          <section className="mt-12 pt-8 border-t border-[var(--border)]">
+          <section
+            ref={workspaceSectionRef}
+            className="mt-10 pt-8 border-t border-[var(--border)] scroll-mt-16"
+          >
+            {/* Workspace Header Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-base sm:text-lg font-semibold text-[var(--text-primary)]">
                   Preview & Export
                 </h3>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Inspect edges and adjust export styling
+                  {queueState.items.length}{" "}
+                  {queueState.items.length === 1 ? "image" : "images"} in queue
+                  {completedCount > 0 && ` · ${completedCount} ready`}
+                  {waitingCount > 0 && ` · ${waitingCount} waiting`}
                 </p>
               </div>
 
-              {/* Batch ZIP Export */}
-              <DownloadButton
-                items={queueState.items}
-                settings={editorSettings}
-                disabled={queueState.isProcessing}
-              />
+              {/* Action Buttons: Process / Stop / Download ZIP / Clear */}
+              <div className="flex items-center gap-2">
+                {queueState.isProcessing ? (
+                  <button
+                    onClick={handleCancelProcessing}
+                    className="px-3 py-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                    <span>Stop</span>
+                  </button>
+                ) : waitingCount > 0 ? (
+                  <button
+                    onClick={handleStartProcessing}
+                    className="px-4 py-1.5 rounded-md bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] hover:opacity-90 text-xs font-medium flex items-center gap-1.5 transition-opacity"
+                  >
+                    <span>
+                      Process {waitingCount}{" "}
+                      {waitingCount === 1 ? "image" : "images"}
+                    </span>
+                  </button>
+                ) : null}
+
+                {/* Batch ZIP Export Button */}
+                <DownloadButton
+                  items={queueState.items}
+                  settings={editorSettings}
+                  disabled={queueState.isProcessing}
+                />
+
+                {/* Clear Queue Button with subtle red on hover */}
+                <button
+                  onClick={handleClearAll}
+                  disabled={queueState.isProcessing}
+                  title="Clear all images"
+                  aria-label="Clear all images"
+                  className="px-2.5 py-1.5 rounded-md text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-40"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Clear</span>
+                </button>
+              </div>
             </div>
 
             {/* Before / After Split Workspace */}
@@ -297,10 +342,12 @@ export default function Home() {
               items={queueState.items}
               selectedItem={selectedItem}
               onSelect={(item) => setSelectedItemId(item.id)}
+              onRemove={handleRemoveItem}
+              disabled={queueState.isProcessing}
             />
 
             {/* Controls (Background, Format, Positioning, Shadow, Export) */}
-            {selectedItem.status === 'completed' && (
+            {selectedItem.status === "completed" && (
               <Editor
                 item={selectedItem}
                 settings={editorSettings}
@@ -311,7 +358,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 7. Minimal Clean Footer */}
+      {/* 6. Minimal Clean Footer */}
       <footer className="w-full border-t border-[var(--border)] py-6 text-center text-xs text-[var(--text-muted)] bg-[var(--background)]">
         <p>
           RemoveBG • Browser-based product background remover • 100% client-side
