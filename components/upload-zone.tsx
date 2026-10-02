@@ -1,17 +1,23 @@
 'use client';
 
-import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
-import { UploadCloud, ShieldCheck, AlertCircle, Sparkles, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, DragEvent, ChangeEvent, ClipboardEvent } from 'react';
+import { UploadCloud, ShieldCheck, AlertCircle, Sparkles, Clipboard, Command } from 'lucide-react';
 import { MAX_BATCH_SIZE } from '@/lib/queue/image-queue';
 import { isSupportedImageType } from '@/lib/image-processing/resize';
 
 interface UploadZoneProps {
   currentCount: number;
   onFilesSelected: (files: File[]) => void;
+  onPasteFromClipboard?: () => void;
   disabled?: boolean;
 }
 
-export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZoneProps) {
+export function UploadZone({
+  currentCount,
+  onFilesSelected,
+  onPasteFromClipboard,
+  disabled,
+}: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +32,7 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
     const validFiles = fileArray.filter(isSupportedImageType);
 
     if (validFiles.length === 0) {
-      setErrorMessage('Please select valid image files (PNG, JPG, WEBP, AVIF, BMP, GIF, SVG, TIFF, etc.).');
+      setErrorMessage('Please select or paste valid image files (PNG, JPG, WEBP, AVIF, BMP, GIF, SVG, TIFF, etc.).');
       return;
     }
 
@@ -67,6 +73,32 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
     }
   };
 
+  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    if (disabled || remainingSlots <= 0) return;
+    if (!e.clipboardData) return;
+
+    const items = e.clipboardData.items;
+    const pastedFiles: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const ext = file.type.split('/')[1] || 'png';
+          const namedFile = new File([file], `clipboard-image-${Date.now()}.${ext}`, {
+            type: file.type || 'image/png',
+          });
+          pastedFiles.push(namedFile);
+        }
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      e.preventDefault();
+      handleFiles(pastedFiles);
+    }
+  };
+
   const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       handleFiles(e.target.files);
@@ -81,7 +113,7 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full" onPaste={onPaste} tabIndex={0}>
       <input
         ref={fileInputRef}
         type="file"
@@ -113,7 +145,7 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
           {remainingSlots <= 0 ? 'Batch limit reached (10 images)' : 'Drop product images here'}
         </h3>
 
-        <p className="text-sm text-zinc-400 mb-5">
+        <p className="text-sm text-zinc-400 mb-4">
           {remainingSlots <= 0 ? (
             'Process or clear existing images to add more'
           ) : (
@@ -122,6 +154,26 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
             </>
           )}
         </p>
+
+        {/* Dedicated Paste from Clipboard button */}
+        {remainingSlots > 0 && !disabled && (
+          <div className="flex items-center gap-2 mb-5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPasteFromClipboard?.();
+              }}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-2 border border-zinc-700/70 hover:border-indigo-500/50 shadow-md transition-all hover:scale-105"
+            >
+              <Clipboard className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Paste Copied Image</span>
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] rounded bg-zinc-900 text-zinc-400 border border-zinc-700 font-mono">
+                Ctrl + V
+              </kbd>
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-400">
           <span className="px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/50">
@@ -154,12 +206,18 @@ export function UploadZone({ currentCount, onFilesSelected, disabled }: UploadZo
         </div>
       )}
 
-      {/* Requirement 17: Prominent Privacy Guarantee */}
-      <div className="mt-3 flex items-center justify-center gap-2 text-xs text-zinc-400">
-        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-        <span>
-          <strong>100% Client-Side Privacy:</strong> Your images are processed locally in your browser. They are never uploaded to a server.
-        </span>
+      {/* Prominent Privacy Guarantee & Clipboard hint */}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-zinc-400">
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>
+            <strong>100% Client-Side:</strong> Never uploaded to a server.
+          </span>
+        </div>
+        <div className="hidden sm:flex items-center gap-1.5 text-zinc-400">
+          <Clipboard className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Press <strong>Ctrl + V</strong> (or <strong>⌘V</strong>) anywhere on page to paste copied images</span>
+        </div>
       </div>
     </div>
   );
