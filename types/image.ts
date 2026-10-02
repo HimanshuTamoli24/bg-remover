@@ -20,6 +20,7 @@ export interface QueueItem {
 
 export type BackgroundType = 'transparent' | 'white' | 'black' | 'custom';
 export type ProductPosition = 'center' | 'fit' | 'contain';
+export type ExportFormat = 'png' | 'jpg' | 'webp';
 
 export interface EditorSettings {
   backgroundType: BackgroundType;
@@ -32,6 +33,7 @@ export interface EditorSettings {
   shadowOffsetY: number;
   refineEdges: boolean;
   defringe: boolean;
+  exportFormat: ExportFormat;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -45,6 +47,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   shadowOffsetY: 12,
   refineEdges: true,
   defringe: true,
+  exportFormat: 'png',
 };
 
 export interface ModelInfo {

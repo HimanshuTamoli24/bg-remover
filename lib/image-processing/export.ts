@@ -40,8 +40,13 @@ export function renderEditedImageCanvas(
     ctx.fillStyle = settings.customColor || '#ffffff';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
   } else {
-    // Transparent: clearRect
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    // Transparent (or White for JPEG which lacks alpha channel)
+    if (settings.exportFormat === 'jpg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    } else {
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    }
   }
 
   // 2. Calculate positioning & padding
@@ -93,7 +98,7 @@ export function renderEditedImageCanvas(
 }
 
 /**
- * Exports edited canvas to a PNG Blob
+ * Exports edited canvas to a Blob with selected format (PNG, JPG, WEBP)
  */
 export async function renderFinalBlob(
   cutoutElement: HTMLImageElement | HTMLCanvasElement,
@@ -102,7 +107,14 @@ export async function renderFinalBlob(
   targetHeight?: number
 ): Promise<Blob> {
   const canvas = renderEditedImageCanvas(cutoutElement, settings, targetWidth, targetHeight);
-  const blob = await canvasToBlob(canvas, 'image/png');
+  const mimeType =
+    settings.exportFormat === 'jpg'
+      ? 'image/jpeg'
+      : settings.exportFormat === 'webp'
+      ? 'image/webp'
+      : 'image/png';
+  const quality = settings.exportFormat === 'png' ? 1.0 : 0.95;
+  const blob = await canvasToBlob(canvas, mimeType, quality);
   // Free canvas memory
   canvas.width = 0;
   canvas.height = 0;

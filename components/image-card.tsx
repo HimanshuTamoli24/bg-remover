@@ -2,19 +2,15 @@
 
 import React, { useState } from 'react';
 import { QueueItem } from '@/types/image';
-import { formatBytes, formatDuration, sanitizeFilename } from '@/lib/utils';
+import { formatBytes, sanitizeFilename } from '@/lib/utils';
 import {
-  CheckCircle2,
-  Clock,
   Loader2,
-  AlertCircle,
-  X,
+  Trash2,
   Download,
-  RotateCcw,
-  Eye,
-  SlidersHorizontal,
   Copy,
   Check,
+  Maximize2,
+  RotateCcw,
 } from 'lucide-react';
 import { triggerBrowserDownload } from '@/lib/image-processing/export';
 
@@ -67,154 +63,144 @@ export function ImageCard({
   return (
     <div
       onClick={() => onSelect(item)}
-      className={`group relative flex flex-col rounded-xl overflow-hidden border transition-all duration-200 cursor-pointer ${
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onSelect(item);
+        }
+      }}
+      className={`group relative flex flex-col rounded-lg overflow-hidden border transition-colors cursor-pointer select-none bg-[var(--surface)] text-[var(--text-primary)] ${
         isSelected
-          ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-zinc-900'
-          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/60'
+          ? 'border-[var(--text-primary)]'
+          : 'border-[var(--border)] hover:border-[var(--border-strong)]'
       }`}
     >
-      {/* Remove Button */}
-      {!disabled && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(item.id);
-          }}
-          title="Remove image"
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 hover:bg-red-950/80 text-zinc-400 hover:text-red-300 border border-zinc-700/50 hover:border-red-700/60 backdrop-blur transition-all opacity-0 group-hover:opacity-100"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
-
-      {/* Thumbnail Container */}
+      {/* Thumbnail Area */}
       <div
-        className={`relative aspect-square w-full flex items-center justify-center overflow-hidden ${
-          isCompleted ? 'checkerboard-bg' : 'bg-zinc-950'
+        className={`relative aspect-square w-full flex items-center justify-center overflow-hidden border-b border-[var(--border)] ${
+          isCompleted ? 'checkerboard-pattern' : 'bg-[var(--background)]'
         }`}
       >
-        {/* Image preview (Result if completed, otherwise original) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={isCompleted && item.resultUrl ? item.resultUrl : item.originalUrl}
           alt={item.name}
-          className="max-h-full max-w-full object-contain p-2 select-none transition-transform duration-200 group-hover:scale-[1.02]"
+          className="max-h-full max-w-full object-contain p-2.5 transition-transform"
         />
 
-        {/* Processing Spinner Overlay */}
+        {/* Minimal Processing Overlay */}
         {isProcessing && (
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center p-4">
-            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-2" />
-            <span className="text-xs font-medium text-zinc-200">Removing background...</span>
-            <div className="w-3/4 bg-zinc-800 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div
-                className="bg-indigo-500 h-full transition-all duration-300"
-                style={{ width: `${item.progress}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-zinc-400 mt-1">{item.progress}%</span>
+          <div className="absolute inset-0 bg-[var(--background)]/85 flex flex-col items-center justify-center p-3">
+            <Loader2 className="w-5 h-5 text-[var(--text-primary)] animate-spin mb-1.5" />
+            <span className="text-xs font-medium text-[var(--text-primary)]">Processing…</span>
+            <span className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
+              {item.progress}%
+            </span>
           </div>
         )}
 
-        {/* Failed Overlay */}
+        {/* Minimal Failed Overlay */}
         {isFailed && (
-          <div className="absolute inset-0 bg-red-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center">
-            <AlertCircle className="w-7 h-7 text-red-400 mb-1.5" />
-            <p className="text-xs font-semibold text-red-200">Processing Failed</p>
-            <p className="text-[10px] text-red-300 line-clamp-2 mt-0.5 px-2">
-              {item.errorMessage || 'Could not process this image.'}
-            </p>
+          <div className="absolute inset-0 bg-[var(--surface)]/95 flex flex-col items-center justify-center p-3 text-center">
+            <span className="text-xs font-medium text-[var(--text-primary)] mb-1">
+              Could not process
+            </span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onRetry(item.id);
               }}
-              className="mt-2 px-2.5 py-1 text-xs rounded-lg bg-red-800/80 hover:bg-red-700 text-white flex items-center gap-1 font-medium transition-colors"
+              className="mt-1.5 px-2 py-1 text-xs rounded border border-[var(--border-strong)] bg-[var(--background)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] flex items-center gap-1 transition-colors"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3 h-3 text-[var(--text-muted)]" />
               Retry
             </button>
           </div>
         )}
 
-        {/* Status Badge */}
-        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium backdrop-blur bg-black/70 border border-zinc-700/50">
-          {isWaiting && (
-            <>
-              <Clock className="w-3 h-3 text-zinc-400" />
-              <span className="text-zinc-300">Waiting</span>
-            </>
-          )}
-          {isProcessing && (
-            <>
-              <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
-              <span className="text-indigo-300">Processing</span>
-            </>
-          )}
-          {isCompleted && (
-            <>
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span className="text-emerald-300">
-                Ready {item.durationMs ? `(${formatDuration(item.durationMs)})` : ''}
-              </span>
-            </>
-          )}
-          {isFailed && (
-            <>
-              <AlertCircle className="w-3 h-3 text-red-400" />
-              <span className="text-red-300">Failed</span>
-            </>
-          )}
+        {/* Minimal Status indicator tag */}
+        <div className="absolute top-2 left-2 text-[10px] font-mono px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--background)]/90 text-[var(--text-muted)]">
+          {isWaiting && 'Queued'}
+          {isProcessing && 'Processing'}
+          {isCompleted && 'Ready'}
+          {isFailed && 'Failed'}
         </div>
       </div>
 
       {/* Card Info Footer */}
-      <div className="p-3 bg-zinc-900/90 border-t border-zinc-800/80 flex flex-col justify-between">
-        <div className="flex items-start justify-between gap-1 mb-1">
-          <p className="text-xs font-medium text-zinc-200 truncate" title={item.name}>
+      <div className="p-2.5 flex flex-col justify-between gap-2 flex-1">
+        <div>
+          <p
+            className="text-xs font-medium text-[var(--text-primary)] truncate"
+            title={item.name}
+          >
             {item.name}
+          </p>
+          <p className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
+            {item.originalWidth && item.originalHeight
+              ? `${item.originalWidth} × ${item.originalHeight}`
+              : formatBytes(item.size)}
           </p>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-zinc-400">
-          <span>{formatBytes(item.size)}</span>
-          {item.originalWidth && item.originalHeight && (
-            <span>
-              {item.originalWidth} × {item.originalHeight}
-            </span>
-          )}
-        </div>
+        {/* Card Actions: Preview / Copy / Download / Delete */}
+        <div className="pt-2 border-t border-[var(--border)] flex items-center justify-between gap-1 text-xs">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(item);
+            }}
+            className="text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors py-0.5"
+          >
+            Preview
+          </button>
 
-        {/* Action Buttons for Completed Items */}
-        {isCompleted && (
-          <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-            <button
-              onClick={() => onSelect(item)}
-              className="flex-1 py-1 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Eye className="w-3 h-3 text-zinc-400" />
-              Inspect
-            </button>
-            <button
-              onClick={handleCopy}
-              title={isCopied ? 'Copied to clipboard!' : 'Copy transparent PNG to clipboard'}
-              className={`p-1.5 rounded-lg border transition-colors ${
-                isCopied
-                  ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
-                  : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-300 hover:text-white'
-              }`}
-            >
-              {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-            <button
-              onClick={handleDownload}
-              title="Download transparent PNG"
-              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </button>
+          <div className="flex items-center gap-1">
+            {isCompleted && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  title="Copy to clipboard"
+                  aria-label="Copy to clipboard"
+                  className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  {isCopied ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  title="Download PNG"
+                  aria-label="Download PNG"
+                  className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+
+            {!disabled && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(item.id);
+                }}
+                title="Remove image"
+                aria-label="Remove image"
+                className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
