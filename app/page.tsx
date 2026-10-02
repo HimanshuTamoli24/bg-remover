@@ -6,6 +6,7 @@ import { UploadZone } from '@/components/upload-zone';
 import { ImageGrid } from '@/components/image-grid';
 import { ProcessingProgress } from '@/components/processing-progress';
 import { BeforeAfter } from '@/components/before-after';
+import { ImageCarousel } from '@/components/image-carousel';
 import { Editor } from '@/components/editor';
 import { DownloadButton } from '@/components/download-button';
 import {
@@ -290,6 +291,13 @@ export default function Home() {
 
             {/* Before / After Split Workspace */}
             <BeforeAfter item={selectedItem} />
+
+            {/* Bottom Image Carousel for quick thumbnail preview & switching */}
+            <ImageCarousel
+              items={queueState.items}
+              selectedItem={selectedItem}
+              onSelect={(item) => setSelectedItemId(item.id)}
+            />
 
             {/* Controls (Background, Format, Positioning, Shadow, Export) */}
             {selectedItem.status === 'completed' && (
