@@ -13,6 +13,7 @@ import {
   EditorSettings,
   DEFAULT_EDITOR_SETTINGS,
   ModelProgressEvent,
+  AVAILABLE_MODELS,
 } from "@/types/image";
 import { getBackgroundRemover } from "@/lib/image-processing/model";
 import { toast } from "sonner";
@@ -64,7 +65,16 @@ export default function Home() {
   const handleModelChange = (newModelId: string) => {
     setActiveModelId(newModelId);
     imageQueue.setModel(newModelId);
-    toast(`Switched AI model to ${newModelId}`);
+    const m = AVAILABLE_MODELS.find((x) => x.id === newModelId);
+    if (m?.badgeVariant === "danger" || m?.badgeVariant === "warning") {
+      toast.warning(
+        `Switched to ${m.name} (${m.badge || "Heavy"}). Large model: high browser memory usage.`
+      );
+    } else {
+      toast.success(
+        `Switched to ${m?.name || newModelId} (${m?.badge || "Recommended"})`
+      );
+    }
   };
 
   // Pre-initialize model with progress callback

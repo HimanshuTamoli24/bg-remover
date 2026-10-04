@@ -110,13 +110,31 @@ export function Editor({
 
   // Mouse interaction state
   const isInteracting = useRef(false);
+  const isStrokeDirty = useRef(false);
   const lastMousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchupUndoStack = useRef<ImageData[]>([]);
+  const touchupRedoStack = useRef<ImageData[]>([]);
+  const [canUndoTouchup, setCanUndoTouchup] = useState(false);
+  const [canRedoTouchup, setCanRedoTouchup] = useState(false);
+  const internalCutoutUrlRef = useRef<string | null>(null);
+  const loadedCutoutSrcRef = useRef<string | null>(null);
 
   // Load Cutout Image and Original Image
   useEffect(() => {
     const cutoutSrc = item.userEditedResultUrl || item.resultUrl;
     if (!cutoutSrc) return;
+
+    // Avoid reloading canvas if this update was triggered by our own manual stroke modification
+    if (cutoutSrc === internalCutoutUrlRef.current && cutoutCanvasRef.current) {
+      return;
+    }
+
+    // Avoid reloading if the exact same source is already loaded on canvas
+    if (loadedCutoutSrcRef.current === cutoutSrc && cutoutCanvasRef.current) {
+      return;
+    }
+
+    loadedCutoutSrcRef.current = cutoutSrc;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -130,9 +148,11 @@ export function Editor({
         ctx.drawImage(img, 0, 0);
         cutoutCanvasRef.current = offscreen;
         // Save initial snapshot
-        touchupUndoStack.current = [
-          ctx.getImageData(0, 0, offscreen.width, offscreen.height),
-        ];
+        const initialSnap = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+        touchupUndoStack.current = [initialSnap];
+        touchupRedoStack.current = [];
+        setCanUndoTouchup(false);
+        setCanRedoTouchup(false);
         renderPreview();
       }
     };
@@ -197,6 +217,93 @@ export function Editor({
     renderPreview();
   }, [renderPreview]);
 
+  // Touchup Stroke Undo & Redo
+  const handleTouchupUndo = useCallback(() => {
+    if (touchupUndoStack.current.length <= 1 || !cutoutCanvasRef.current) return;
+    const currentSnapshot = touchupUndoStack.current.pop()!;
+    touchupRedoStack.current.push(currentSnapshot);
+
+    const prevSnapshot = touchupUndoStack.current[touchupUndoStack.current.length - 1];
+    const ctx = cutoutCanvasRef.current.getContext('2d', { willReadFrequently: true });
+    if (ctx && prevSnapshot) {
+      ctx.putImageData(prevSnapshot, 0, 0);
+      renderPreview();
+
+      cutoutCanvasRef.current.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          internalCutoutUrlRef.current = url;
+          onCutoutModified?.(blob, url);
+        }
+      }, 'image/png');
+    }
+
+    setCanUndoTouchup(touchupUndoStack.current.length > 1);
+    setCanRedoTouchup(touchupRedoStack.current.length > 0);
+  }, [onCutoutModified, renderPreview]);
+
+  const handleTouchupRedo = useCallback(() => {
+    if (touchupRedoStack.current.length === 0 || !cutoutCanvasRef.current) return;
+    const nextSnapshot = touchupRedoStack.current.pop()!;
+    touchupUndoStack.current.push(nextSnapshot);
+
+    const ctx = cutoutCanvasRef.current.getContext('2d', { willReadFrequently: true });
+    if (ctx) {
+      ctx.putImageData(nextSnapshot, 0, 0);
+      renderPreview();
+
+      cutoutCanvasRef.current.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          internalCutoutUrlRef.current = url;
+          onCutoutModified?.(blob, url);
+        }
+      }, 'image/png');
+    }
+
+    setCanUndoTouchup(touchupUndoStack.current.length > 1);
+    setCanRedoTouchup(touchupRedoStack.current.length > 0);
+  }, [onCutoutModified, renderPreview]);
+
+  // Unified Global Undo & Redo
+  const handleGlobalUndo = useCallback(() => {
+    if (toolMode === 'eraser' || toolMode === 'pen') {
+      if (canUndoTouchup) {
+        handleTouchupUndo();
+        return;
+      }
+    }
+    if (canUndo) {
+      undo();
+    } else if (canUndoTouchup) {
+      handleTouchupUndo();
+    }
+  }, [toolMode, canUndoTouchup, canUndo, handleTouchupUndo, undo]);
+
+  const handleGlobalRedo = useCallback(() => {
+    if (toolMode === 'eraser' || toolMode === 'pen') {
+      if (canRedoTouchup) {
+        handleTouchupRedo();
+        return;
+      }
+    }
+    if (canRedo) {
+      redo();
+    } else if (canRedoTouchup) {
+      handleTouchupRedo();
+    }
+  }, [toolMode, canRedoTouchup, canRedo, handleTouchupRedo, redo]);
+
+  const effectiveCanUndo =
+    toolMode === 'eraser' || toolMode === 'pen'
+      ? canUndoTouchup || canUndo
+      : canUndo || canUndoTouchup;
+
+  const effectiveCanRedo =
+    toolMode === 'eraser' || toolMode === 'pen'
+      ? canRedoTouchup || canRedo
+      : canRedo || canRedoTouchup;
+
   // Keyboard Shortcuts for Undo (Ctrl+Z) and Redo (Ctrl+Y / Ctrl+Shift+Z)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -207,23 +314,23 @@ export function Editor({
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) {
           e.preventDefault();
-          if (canRedo) redo();
+          if (effectiveCanRedo) handleGlobalRedo();
         } else {
           e.preventDefault();
-          if (canUndo) undo();
+          if (effectiveCanUndo) handleGlobalUndo();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
-        if (canRedo) redo();
+        if (effectiveCanRedo) handleGlobalRedo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canUndo, canRedo, undo, redo]);
+  }, [effectiveCanUndo, effectiveCanRedo, handleGlobalUndo, handleGlobalRedo]);
 
   // Map preview canvas coordinate to offscreen cutout coordinate for touchup
   const mapCanvasToCutout = (
@@ -273,6 +380,7 @@ export function Editor({
   // Canvas Mouse / Touch Handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     isInteracting.current = true;
+    isStrokeDirty.current = false;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     const rect = previewCanvasRef.current?.getBoundingClientRect();
@@ -293,6 +401,7 @@ export function Editor({
           } else if (toolMode === 'pen' && originalImageRef.current) {
             applyRestoreStroke(ctx, originalImageRef.current, pt.x, pt.y, pt.x, pt.y, brushSize);
           }
+          isStrokeDirty.current = true;
           renderPreview();
         }
       }
@@ -351,6 +460,7 @@ export function Editor({
               brushSize
             );
           }
+          isStrokeDirty.current = true;
           renderPreview();
         }
       }
@@ -364,7 +474,8 @@ export function Editor({
     if (toolMode === 'move') {
       commitSettingsToHistory(settings);
     } else if (toolMode === 'eraser' || toolMode === 'pen') {
-      if (cutoutCanvasRef.current) {
+      if (isStrokeDirty.current && cutoutCanvasRef.current) {
+        isStrokeDirty.current = false;
         const ctx = cutoutCanvasRef.current.getContext('2d', { willReadFrequently: true });
         if (ctx) {
           const snapshot = ctx.getImageData(
@@ -374,14 +485,18 @@ export function Editor({
             cutoutCanvasRef.current.height
           );
           touchupUndoStack.current.push(snapshot);
-          if (touchupUndoStack.current.length > 20) {
+          if (touchupUndoStack.current.length > 25) {
             touchupUndoStack.current.shift();
           }
+          touchupRedoStack.current = [];
+          setCanUndoTouchup(touchupUndoStack.current.length > 1);
+          setCanRedoTouchup(false);
 
           // Generate blob and notify parent
           cutoutCanvasRef.current.toBlob((blob) => {
             if (blob) {
               const url = URL.createObjectURL(blob);
+              internalCutoutUrlRef.current = url;
               onCutoutModified?.(blob, url);
             }
           }, 'image/png');
@@ -390,39 +505,34 @@ export function Editor({
     }
   };
 
-  // Mouse wheel zoom on canvas
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.05 : -0.05;
-    const currentZoom = settings.transform?.zoom || 1;
-    const nextZoom = Math.max(0.2, Math.min(3.0, Math.round((currentZoom + delta) * 100) / 100));
-
-    updateSettings({
-      ...settings,
-      transform: {
-        ...settings.transform,
-        zoom: nextZoom,
-      },
-    });
-  };
-
   // Revert all touchup brush strokes
   const handleResetTouchups = () => {
-    if (!item.resultUrl || !cutoutCanvasRef.current) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (cutoutCanvasRef.current) {
-        const ctx = cutoutCanvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, cutoutCanvasRef.current.width, cutoutCanvasRef.current.height);
-          ctx.drawImage(img, 0, 0);
-          renderPreview();
-          toast.success('Cutout restored to original AI result');
-        }
+    if (!cutoutCanvasRef.current || touchupUndoStack.current.length === 0) return;
+    const initialSnapshot = touchupUndoStack.current[0];
+    const currentSnapshot = touchupUndoStack.current[touchupUndoStack.current.length - 1];
+
+    if (!initialSnapshot) return;
+
+    const ctx = cutoutCanvasRef.current.getContext('2d', { willReadFrequently: true });
+    if (ctx) {
+      ctx.putImageData(initialSnapshot, 0, 0);
+      if (currentSnapshot && currentSnapshot !== initialSnapshot) {
+        touchupRedoStack.current.push(currentSnapshot);
       }
-    };
-    img.src = item.resultUrl;
+      touchupUndoStack.current = [initialSnapshot];
+      setCanUndoTouchup(false);
+      setCanRedoTouchup(touchupRedoStack.current.length > 0);
+      renderPreview();
+
+      cutoutCanvasRef.current.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          internalCutoutUrlRef.current = url;
+          onCutoutModified?.(blob, url);
+        }
+      }, 'image/png');
+      toast.success('Cutout restored to original AI result');
+    }
   };
 
   // Auto-fit & Auto-center (Phase 2)
@@ -575,8 +685,8 @@ export function Editor({
         <div className="flex items-center gap-1.5 ml-auto">
           <button
             type="button"
-            onClick={undo}
-            disabled={!canUndo}
+            onClick={handleGlobalUndo}
+            disabled={!effectiveCanUndo}
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
             className="h-7 w-7 rounded-md border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:pointer-events-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors"
@@ -585,8 +695,8 @@ export function Editor({
           </button>
           <button
             type="button"
-            onClick={redo}
-            disabled={!canRedo}
+            onClick={handleGlobalRedo}
+            disabled={!effectiveCanRedo}
             title="Redo (Ctrl+Y)"
             aria-label="Redo"
             className="h-7 w-7 rounded-md border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:pointer-events-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors"
@@ -655,9 +765,33 @@ export function Editor({
               </button>
             </div>
 
-            {/* If Eraser or Pen active: Brush size slider and Reset Mask */}
+            {/* If Eraser or Pen active: Brush size slider, Undo/Redo, and Reset */}
             {(toolMode === 'eraser' || toolMode === 'pen') && (
-              <div className="flex items-center gap-2 bg-[var(--background)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
+              <div className="flex items-center gap-2 bg-[var(--background)] px-2.5 py-1 rounded-lg border border-[var(--border)] shadow-2xs">
+                {/* Dedicated Touchup Stroke Undo & Redo */}
+                <div className="flex items-center gap-1 border-r border-[var(--border)] pr-2">
+                  <button
+                    type="button"
+                    onClick={handleTouchupUndo}
+                    disabled={!canUndoTouchup}
+                    title="Undo brush stroke (Ctrl+Z)"
+                    aria-label="Undo brush stroke"
+                    className="h-6 w-6 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:pointer-events-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors"
+                  >
+                    <Undo2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTouchupRedo}
+                    disabled={!canRedoTouchup}
+                    title="Redo brush stroke (Ctrl+Y)"
+                    aria-label="Redo brush stroke"
+                    className="h-6 w-6 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:pointer-events-none text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors"
+                  >
+                    <Redo2 className="w-3 h-3" />
+                  </button>
+                </div>
+
                 <span className="text-[11px] text-[var(--text-muted)] font-medium">Size:</span>
                 <input
                   type="range"
@@ -665,7 +799,7 @@ export function Editor({
                   max={80}
                   value={brushSize}
                   onChange={(e) => setBrushSize(parseInt(e.target.value, 10))}
-                  className="w-16 sm:w-24 h-1 bg-[var(--border)] rounded appearance-none cursor-pointer accent-[var(--text-primary)]"
+                  className="w-16 sm:w-20 h-1 bg-[var(--border)] rounded appearance-none cursor-pointer accent-[var(--text-primary)]"
                 />
                 <span className="text-[11px] font-mono text-[var(--text-secondary)] w-6">
                   {brushSize}p
@@ -673,8 +807,9 @@ export function Editor({
                 <button
                   type="button"
                   onClick={handleResetTouchups}
+                  disabled={!canUndoTouchup && !canRedoTouchup}
                   title="Revert manual brush edits"
-                  className="text-[11px] text-red-500 hover:underline ml-1"
+                  className="text-[11px] text-red-500 hover:underline ml-1 disabled:opacity-30 disabled:pointer-events-none"
                 >
                   Reset
                 </button>
@@ -682,7 +817,7 @@ export function Editor({
             )}
           </div>
 
-          {/* Canvas Display Viewport */}
+          {/* Canvas Display Viewport (two-finger scroll now scrolls page naturally without auto-zoom) */}
           <div
             className={`relative w-full aspect-square max-h-[460px] rounded-xl border border-[var(--border)] flex items-center justify-center overflow-hidden select-none shadow-inner ${
               settings.backgroundType === 'transparent' ? 'checkerboard-pattern' : ''
@@ -706,7 +841,6 @@ export function Editor({
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onWheel={handleWheel}
             onMouseLeave={() => setCursorPos(null)}
           >
             <canvas

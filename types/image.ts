@@ -178,6 +178,8 @@ export interface ModelInfo {
   size: string;
   recommended?: boolean;
   isLite?: boolean;
+  badge?: 'Recommended' | 'Heavy' | 'Risk & Heavy' | string;
+  badgeVariant?: 'recommended' | 'warning' | 'danger';
 }
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
@@ -188,6 +190,8 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     tagline: 'Fastest & highly accurate for e-commerce products (~44 MB)',
     size: '~44 MB',
     recommended: true,
+    badge: 'Recommended',
+    badgeVariant: 'recommended',
   },
   {
     id: 'birefnet-lite',
@@ -196,6 +200,8 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     tagline: 'High-resolution bilateral refiner, preserves fine straps & wires (~110 MB)',
     size: '~110 MB',
     isLite: true,
+    badge: 'Risk & Heavy',
+    badgeVariant: 'warning',
   },
   {
     id: 'birefnet-full',
@@ -203,6 +209,8 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     name: 'BiRefNet (Full)',
     tagline: 'Maximum precision dichotomous segmentation model (~490 MB)',
     size: '~490 MB',
+    badge: 'Risk & Heavy',
+    badgeVariant: 'danger',
   },
 ];
 

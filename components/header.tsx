@@ -63,7 +63,20 @@ export function Header({ activeModelId, onSelectModel, disabled }: HeaderProps) 
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--surface)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
               title="Select AI Model"
             >
-              <span>{activeModel.name}</span>
+              <span className="font-medium">{activeModel.name}</span>
+              {activeModel.badge && (
+                <span
+                  className={`text-[9px] px-1.5 py-0.5 rounded font-medium border hidden sm:inline-block ${
+                    activeModel.badgeVariant === 'recommended'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                      : activeModel.badgeVariant === 'danger'
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                  }`}
+                >
+                  {activeModel.badge}
+                </span>
+              )}
               <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
             </button>
 
@@ -73,38 +86,65 @@ export function Header({ activeModelId, onSelectModel, disabled }: HeaderProps) 
                   className="fixed inset-0 z-40"
                   onClick={() => setModelDropdownOpen(false)}
                 />
-                <div className="absolute right-0 mt-1.5 w-64 rounded-lg bg-[var(--surface)] border border-[var(--border-strong)] p-1 z-50 text-xs shadow-none animate-in fade-in">
-                  <div className="px-2 py-1 text-[11px] font-medium text-[var(--text-muted)]">
-                    AI Model ({hasWebGPU ? 'WebGPU' : 'WebAssembly'})
+                <div className="absolute right-0 mt-1.5 w-72 sm:w-80 rounded-lg bg-[var(--surface)] border border-[var(--border-strong)] p-1.5 z-50 text-xs shadow-lg animate-in fade-in">
+                  <div className="px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)] flex items-center justify-between border-b border-[var(--border)] mb-1 pb-1.5">
+                    <span>AI Model</span>
+                    <span className="font-mono text-[10px] font-normal uppercase text-[var(--text-muted)]">
+                      {hasWebGPU ? 'WebGPU' : 'WebAssembly'}
+                    </span>
                   </div>
-                  {AVAILABLE_MODELS.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        onSelectModel(model.id);
-                        setModelDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md flex items-center justify-between transition-colors ${
-                        activeModelId === model.id
-                          ? 'bg-[var(--text-primary)] text-[var(--btn-primary-text)]'
-                          : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium">{model.name}</div>
-                        <div
-                          className={`text-[10px] ${
-                            activeModelId === model.id
-                              ? 'opacity-80'
-                              : 'text-[var(--text-muted)]'
+                  <div className="space-y-1">
+                    {AVAILABLE_MODELS.map((model) => {
+                      const isSelected = activeModelId === model.id;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectModel(model.id);
+                            setModelDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2 rounded-md transition-colors ${
+                            isSelected
+                              ? 'bg-[var(--surface-hover)] border border-[var(--border-strong)]'
+                              : 'hover:bg-[var(--surface-hover)] border border-transparent'
                           }`}
                         >
-                          {model.size}
-                        </div>
-                      </div>
-                      {activeModelId === model.id && <Check className="w-3.5 h-3.5" />}
-                    </button>
-                  ))}
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-[var(--text-primary)]">
+                                {model.name}
+                              </span>
+                              {model.badge && (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${
+                                    model.badgeVariant === 'recommended'
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                                      : model.badgeVariant === 'danger'
+                                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                                  }`}
+                                >
+                                  {model.badge}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                                {model.size}
+                              </span>
+                              {isSelected && (
+                                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-[var(--text-muted)] mt-1 line-clamp-2 leading-snug">
+                            {model.tagline}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}
