@@ -1,18 +1,30 @@
-import { ModelProgressEvent, ProcessingResult, AVAILABLE_MODELS } from '@/types/image';
-import { applyMaskToOriginal, createGrayscaleMaskImageData, MaskRefinementOptions } from './mask';
-import { imageElementToImageData, loadImageElement } from './resize';
+import {
+  ModelProgressEvent,
+  ProcessingResult,
+  AVAILABLE_MODELS,
+} from "@/types/image";
+import {
+  applyMaskToOriginal,
+  createGrayscaleMaskImageData,
+  MaskRefinementOptions,
+} from "./mask";
+import { imageElementToImageData, loadImageElement } from "./resize";
 
 export interface BackgroundRemover {
   readonly id: string;
   readonly name: string;
   readonly hubId: string;
-  readonly device: 'webgpu' | 'wasm' | 'cpu';
+  readonly device: "webgpu" | "wasm" | "cpu";
 
-  initialize(onProgress?: (progress: ModelProgressEvent) => void): Promise<void>;
+  initialize(
+    onProgress?: (progress: ModelProgressEvent) => void,
+  ): Promise<void>;
   isInitialized(): boolean;
   removeBackground(
     image: ImageData | ImageBitmap | HTMLImageElement | File | Blob | string,
-    options?: MaskRefinementOptions & { onProgress?: (percent: number) => void }
+    options?: MaskRefinementOptions & {
+      onProgress?: (percent: number) => void;
+    },
   ): Promise<ProcessingResult>;
   dispose(): Promise<void>;
 }
@@ -21,7 +33,7 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
   public readonly id: string;
   public readonly name: string;
   public readonly hubId: string;
-  public device: 'webgpu' | 'wasm' | 'cpu' = 'wasm';
+  public device: "webgpu" | "wasm" | "cpu" = "wasm";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private model: any = null;
@@ -29,8 +41,9 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
   private processor: any = null;
   private initializingPromise: Promise<void> | null = null;
 
-  constructor(modelId = 'rmbg-1.4') {
-    const found = AVAILABLE_MODELS.find((m) => m.id === modelId) || AVAILABLE_MODELS[0];
+  constructor(modelId = "rmbg-1.4") {
+    const found =
+      AVAILABLE_MODELS.find((m) => m.id === modelId) || AVAILABLE_MODELS[0];
     this.id = found.id;
     this.name = found.name;
     this.hubId = found.hubId;
@@ -40,9 +53,15 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
     return this.model !== null && this.processor !== null;
   }
 
-  public async initialize(onProgress?: (progress: ModelProgressEvent) => void): Promise<void> {
+  public async initialize(
+    onProgress?: (progress: ModelProgressEvent) => void,
+  ): Promise<void> {
     if (this.isInitialized()) {
-      onProgress?.({ status: 'ready', progress: 100, message: 'Model is ready' });
+      onProgress?.({
+        status: "ready",
+        progress: 100,
+        message: "Model is ready",
+      });
       return;
     }
 
@@ -51,26 +70,37 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
     }
 
     this.initializingPromise = (async () => {
-      if (typeof window === 'undefined') {
-        throw new Error('BackgroundRemover must be initialized in a browser environment');
+      if (typeof window === "undefined") {
+        throw new Error(
+          "BackgroundRemover must be initialized in a browser environment",
+        );
       }
 
       onProgress?.({
-        status: 'init',
+        status: "init",
         progress: 0,
-        message: 'Initializing browser AI runtime...',
+        message: "Initializing browser AI runtime...",
       });
 
       // Dynamically import @huggingface/transformers
-      const { AutoModel, AutoProcessor, env } = await import('@huggingface/transformers');
+      const { AutoModel, AutoProcessor, env } =
+        await import("@huggingface/transformers");
 
       // Configure client-side environment
       env.allowLocalModels = false;
       env.useBrowserCache = true;
 
-      // Determine acceleration device
-      const hasWebGpu = typeof navigator !== 'undefined' && 'gpu' in navigator;
-      this.device = hasWebGpu ? 'webgpu' : 'wasm';
+      // Determine acceleration device (WebGPU requires a secure HTTPS/localhost context)
+      const isSecure =
+        typeof window !== "undefined" ? window.isSecureContext : false;
+      const hasWebGpu =
+        isSecure && typeof navigator !== "undefined" && "gpu" in navigator;
+
+      // BiRefNet models require 17 storage buffers in their attention/refinement shaders.
+      // Standard browser WebGPU adapters strictly limit maxStorageBuffersPerShaderStage to 16.
+      // Therefore, BiRefNet must execute on WASM (CPU), while RMBG-1.4 runs on WebGPU.
+      const canUseWebGpu = hasWebGpu && this.id === "rmbg-1.4";
+      this.device = canUseWebGpu ? "webgpu" : "wasm";
 
       const fileLoads: Record<string, { loaded: number; total: number }> = {};
 
@@ -84,14 +114,14 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       }) => {
         if (!onProgress) return;
 
-        if (event.status === 'initiate') {
+        if (event.status === "initiate") {
           onProgress({
-            status: 'downloading',
+            status: "downloading",
             progress: 0,
             file: event.file,
-            message: `Starting download: ${event.file || 'model weights'}...`,
+            message: `Starting download: ${event.file || "model weights"}...`,
           });
-        } else if (event.status === 'progress' && event.file) {
+        } else if (event.status === "progress" && event.file) {
           fileLoads[event.file] = {
             loaded: event.loaded || 0,
             total: event.total || 0,
@@ -107,47 +137,72 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
           const percent =
             totalBytes > 0
               ? Math.min(99, Math.round((totalLoaded / totalBytes) * 100))
-              : (event.progress || 0);
+              : event.progress || 0;
 
           onProgress({
-            status: 'downloading',
+            status: "downloading",
             progress: percent,
             loaded: totalLoaded,
             total: totalBytes,
             file: event.file,
             message: `Downloading AI model: ${percent}%`,
           });
-        } else if (event.status === 'done') {
+        } else if (event.status === "done") {
           onProgress({
-            status: 'loading',
+            status: "loading",
             progress: 99,
             file: event.file,
-            message: 'Loading model into browser memory...',
+            message: "Loading model into browser memory...",
           });
         }
       };
 
+      // Determine optimal dtype:
+      // RMBG-1.4 has an official quantized model (model_quantized.onnx) which is only ~42.3 MB.
+      // BiRefNet models have fp16 for WebGPU and fp32 for WASM.
+      const isRmbg = this.id === "rmbg-1.4";
+      const primaryDtype = isRmbg
+        ? "q8"
+        : this.device === "webgpu"
+          ? "fp16"
+          : "fp32";
+
       try {
-        // Try WebGPU first if supported
         this.model = await AutoModel.from_pretrained(this.hubId, {
           device: this.device,
           progress_callback: progressCallback,
-          dtype: 'fp32',
+          dtype: primaryDtype,
         });
-      } catch (gpuError) {
-        console.warn(`Failed to initialize on ${this.device}, falling back to wasm:`, gpuError);
-        this.device = 'wasm';
+      } catch (firstError) {
+        console.warn(
+          `Primary model load attempt failed on ${this.device}:`,
+          firstError,
+        );
+        this.device = "wasm";
         onProgress?.({
-          status: 'loading',
+          status: "loading",
           progress: 50,
-          message: 'Falling back to WebAssembly CPU engine...',
+          message: "Falling back to WebAssembly CPU engine...",
         });
 
-        this.model = await AutoModel.from_pretrained(this.hubId, {
-          device: 'wasm',
-          progress_callback: progressCallback,
-          dtype: 'fp32',
-        });
+        const fallbackDtype = isRmbg ? "q8" : "fp32";
+        try {
+          this.model = await AutoModel.from_pretrained(this.hubId, {
+            device: "wasm",
+            progress_callback: progressCallback,
+            dtype: fallbackDtype,
+          });
+        } catch (fallbackError) {
+          console.warn(
+            "Fallback WASM load failed, attempting standard fp32:",
+            fallbackError,
+          );
+          this.model = await AutoModel.from_pretrained(this.hubId, {
+            device: "wasm",
+            progress_callback: progressCallback,
+            dtype: "fp32",
+          });
+        }
       }
 
       // Load processor
@@ -156,7 +211,7 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       });
 
       onProgress?.({
-        status: 'ready',
+        status: "ready",
         progress: 100,
         message: `Ready (${this.device.toUpperCase()})`,
       });
@@ -166,18 +221,26 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
   }
 
   public async removeBackground(
-    imageSource: ImageData | ImageBitmap | HTMLImageElement | File | Blob | string,
-    options?: MaskRefinementOptions & { onProgress?: (percent: number) => void }
+    imageSource:
+      | ImageData
+      | ImageBitmap
+      | HTMLImageElement
+      | File
+      | Blob
+      | string,
+    options?: MaskRefinementOptions & {
+      onProgress?: (percent: number) => void;
+    },
   ): Promise<ProcessingResult> {
     if (!this.isInitialized()) {
       await this.initialize();
     }
 
     if (!this.model || !this.processor) {
-      throw new Error('AI Background Remover failed to initialize');
+      throw new Error("AI Background Remover failed to initialize");
     }
 
-    const { RawImage } = await import('@huggingface/transformers');
+    const { RawImage } = await import("@huggingface/transformers");
 
     // 1. Resolve source to original ImageData (preserving original resolution)
     let originalImageData: ImageData;
@@ -185,18 +248,29 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
 
     if (imageSource instanceof ImageData) {
       originalImageData = imageSource;
-    } else if (typeof ImageBitmap !== 'undefined' && imageSource instanceof ImageBitmap) {
+    } else if (
+      typeof ImageBitmap !== "undefined" &&
+      imageSource instanceof ImageBitmap
+    ) {
       cleanupBitmap = imageSource;
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.width = imageSource.width;
       canvas.height = imageSource.height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) throw new Error('Could not create 2D canvas context');
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) throw new Error("Could not create 2D canvas context");
       ctx.drawImage(imageSource, 0, 0);
-      originalImageData = ctx.getImageData(0, 0, imageSource.width, imageSource.height);
+      originalImageData = ctx.getImageData(
+        0,
+        0,
+        imageSource.width,
+        imageSource.height,
+      );
       canvas.width = 0;
       canvas.height = 0;
-    } else if (typeof HTMLImageElement !== 'undefined' && imageSource instanceof HTMLImageElement) {
+    } else if (
+      typeof HTMLImageElement !== "undefined" &&
+      imageSource instanceof HTMLImageElement
+    ) {
       originalImageData = imageElementToImageData(imageSource);
     } else {
       const img = await loadImageElement(imageSource as File | Blob | string);
@@ -213,7 +287,7 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       originalImageData.data,
       origWidth,
       origHeight,
-      4
+      4,
     );
 
     options?.onProgress?.(30);
@@ -223,27 +297,62 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
     const inputs: any = await this.processor(rawImg);
 
     // Map input tensor name to model's expected input name
-    const session = this.model.sessions?.['model'] || Object.values(this.model.sessions || {})[0];
+    const session =
+      this.model.sessions?.["model"] ||
+      Object.values(this.model.sessions || {})[0];
     const sessionInputNames: string[] = session?.inputNames || [];
-    if (sessionInputNames.length > 0 && !sessionInputNames.includes('pixel_values')) {
+    if (
+      sessionInputNames.length > 0 &&
+      !sessionInputNames.includes("pixel_values")
+    ) {
       const targetInputName = sessionInputNames[0];
       inputs[targetInputName] = inputs.pixel_values || Object.values(inputs)[0];
     }
 
     options?.onProgress?.(50);
 
-    // 4. Run model inference locally in browser
-    const outputs = await this.model(inputs);
+    // 4. Run model inference locally in browser with automatic WASM fallback on shader buffer overflow
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let outputs: any;
+    try {
+      outputs = await this.model(inputs);
+    } catch (inferenceErr: unknown) {
+      const errStr = String(inferenceErr);
+      if (
+        this.device === "webgpu" &&
+        (errStr.includes("storage buffers") ||
+          errStr.includes("maxStorageBuffersPerShaderStage") ||
+          errStr.includes("OrtRun") ||
+          errStr.includes("ShaderVariableHelper"))
+      ) {
+        console.warn(
+          "WebGPU storage buffer limit hit (17 > 16), automatically falling back to WASM engine...",
+          inferenceErr
+        );
+        this.device = "wasm";
+        const { AutoModel } = await import("@huggingface/transformers");
+        this.model = await AutoModel.from_pretrained(this.hubId, {
+          device: "wasm",
+          dtype: this.id === "rmbg-1.4" ? "q8" : "fp32",
+        });
+        outputs = await this.model(inputs);
+      } else {
+        throw inferenceErr;
+      }
+    }
 
     options?.onProgress?.(75);
 
     // 5. Extract output segmentation tensor
     const sessionOutputNames: string[] = session?.outputNames || [];
-    const outputKey = sessionOutputNames.length > 0 ? sessionOutputNames[0] : Object.keys(outputs)[0];
+    const outputKey =
+      sessionOutputNames.length > 0
+        ? sessionOutputNames[0]
+        : Object.keys(outputs)[0];
     const outputTensor = outputs[outputKey];
 
     if (!outputTensor) {
-      throw new Error('Segmentation model did not return output tensor');
+      throw new Error("Segmentation model did not return output tensor");
     }
 
     // 6. Process tensor into alpha mask: apply sigmoid, convert to uint8 [0..255]
@@ -254,10 +363,13 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       item.sigmoid_();
     }
 
-    const maskTensor = item.mul_(255).to('uint8');
+    const maskTensor = item.mul_(255).to("uint8");
 
     // Scale mask back to 100% of original image dimensions
-    const maskRawImage = await RawImage.fromTensor(maskTensor).resize(origWidth, origHeight);
+    const maskRawImage = await RawImage.fromTensor(maskTensor).resize(
+      origWidth,
+      origHeight,
+    );
 
     // Create grayscale mask ImageData
     let maskImageData: ImageData;
@@ -265,7 +377,7 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       maskImageData = createGrayscaleMaskImageData(
         maskRawImage.data,
         maskRawImage.width,
-        maskRawImage.height
+        maskRawImage.height,
       );
     } else {
       const maskPixels = new Uint8ClampedArray(origWidth * origHeight);
@@ -273,16 +385,24 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
       for (let i = 0; i < maskPixels.length; i++) {
         maskPixels[i] = srcData[i * maskRawImage.channels];
       }
-      maskImageData = createGrayscaleMaskImageData(maskPixels, origWidth, origHeight);
+      maskImageData = createGrayscaleMaskImageData(
+        maskPixels,
+        origWidth,
+        origHeight,
+      );
     }
 
     options?.onProgress?.(88);
 
     // 7. Apply mask directly to full original resolution with edge refinement & despill
-    const refinedResult = applyMaskToOriginal(originalImageData, maskImageData, {
-      defringe: options?.defringe ?? true,
-      refineEdges: options?.refineEdges ?? true,
-    });
+    const refinedResult = applyMaskToOriginal(
+      originalImageData,
+      maskImageData,
+      {
+        defringe: options?.defringe ?? true,
+        refineEdges: options?.refineEdges ?? true,
+      },
+    );
 
     options?.onProgress?.(100);
 
@@ -306,11 +426,11 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
   public async dispose(): Promise<void> {
     if (this.model) {
       try {
-        if (typeof this.model.dispose === 'function') {
+        if (typeof this.model.dispose === "function") {
           await this.model.dispose();
         }
       } catch (err) {
-        console.warn('Error disposing model:', err);
+        console.warn("Error disposing model:", err);
       }
       this.model = null;
     }
@@ -321,7 +441,7 @@ export class TransformersBackgroundRemover implements BackgroundRemover {
 
 const instances: Map<string, TransformersBackgroundRemover> = new Map();
 
-export function getBackgroundRemover(modelId = 'rmbg-1.4'): BackgroundRemover {
+export function getBackgroundRemover(modelId = "rmbg-1.4"): BackgroundRemover {
   if (!instances.has(modelId)) {
     instances.set(modelId, new TransformersBackgroundRemover(modelId));
   }

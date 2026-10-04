@@ -79,9 +79,30 @@ export default function Home() {
         });
         setActiveDevice(remover.device);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to initialize AI model:", err);
-      toast.error("Failed to load AI model weights");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        toast.error(
+          "Model load failed. On mobile or remote PC, HTTPS is required for browser AI runtime.",
+        );
+      } else if (
+        msg.toLowerCase().includes("fetch") ||
+        msg.toLowerCase().includes("network")
+      ) {
+        toast.error(
+          "Network error: unable to download model weights from Hugging Face. Check internet or VPN.",
+        );
+      } else if (
+        msg.toLowerCase().includes("memory") ||
+        msg.toLowerCase().includes("allocate")
+      ) {
+        toast.error(
+          "Device memory limit: close other browser tabs or background apps.",
+        );
+      } else {
+        toast.error(`Failed to load AI model weights: ${msg.slice(0, 60)}`);
+      }
     } finally {
       setIsPreloadingModel(false);
     }
@@ -230,14 +251,20 @@ export default function Home() {
         userEditedResultUrl: url,
       });
     },
-    [selectedItem]
+    [selectedItem],
   );
 
   // Handle batch setting synchronization across images
   const handleApplyBatchSettings = useCallback(
     (
-      type: "all" | "background" | "position" | "shadow" | "adjustments" | "canvas",
-      newSettings: EditorSettings
+      type:
+        | "all"
+        | "background"
+        | "position"
+        | "shadow"
+        | "adjustments"
+        | "canvas",
+      newSettings: EditorSettings,
     ) => {
       setEditorSettings((prev) => {
         switch (type) {
@@ -283,7 +310,7 @@ export default function Home() {
         }
       });
     },
-    []
+    [],
   );
 
   const waitingCount = queueState.items.filter(
