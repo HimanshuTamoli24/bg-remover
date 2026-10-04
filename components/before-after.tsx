@@ -111,7 +111,8 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  const hasResult = Boolean(item.resultUrl);
+  const resultSrc = item.userEditedResultUrl || item.resultUrl;
+  const hasResult = Boolean(resultSrc);
 
   return (
     <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl sm:rounded-2xl overflow-hidden flex flex-col transition-colors">
@@ -261,7 +262,7 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
               <div className="absolute inset-4 checkerboard-pattern rounded-lg overflow-hidden flex items-center justify-center border border-[var(--border)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.resultUrl}
+                  src={resultSrc}
                   alt="Result background removed"
                   className="max-h-full max-w-full object-contain pointer-events-none"
                 />
@@ -320,7 +321,7 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
               <div className="relative w-full h-full checkerboard-pattern rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.resultUrl}
+                  src={resultSrc}
                   alt="Result"
                   className="max-h-full max-w-full object-contain p-2"
                 />
@@ -354,7 +355,7 @@ export function BeforeAfter({ item }: BeforeAfterProps) {
               <div className="relative w-full h-full checkerboard-pattern rounded-lg border border-[var(--border)] flex items-center justify-center overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.resultUrl}
+                  src={resultSrc}
                   alt="After"
                   className="max-h-full max-w-full object-contain p-2"
                 />

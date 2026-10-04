@@ -132,7 +132,11 @@ export function ImageCarousel({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={isCompleted && item.resultUrl ? item.resultUrl : item.originalUrl}
+                    src={
+                      isCompleted && (item.userEditedResultUrl || item.resultUrl)
+                        ? (item.userEditedResultUrl || item.resultUrl)
+                        : item.originalUrl
+                    }
                     alt={item.name}
                     className="max-h-full max-w-full object-contain p-1 pointer-events-none"
                   />

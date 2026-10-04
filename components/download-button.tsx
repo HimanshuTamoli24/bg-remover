@@ -10,6 +10,7 @@ import {
 } from '@/lib/image-processing/export';
 import { sanitizeFilename } from '@/lib/utils';
 import { loadImageElement } from '@/lib/image-processing/resize';
+import { toast } from 'sonner';
 
 interface DownloadButtonProps {
   items: QueueItem[];
@@ -21,7 +22,9 @@ export function DownloadButton({ items, settings, disabled }: DownloadButtonProp
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
 
-  const completedItems = items.filter((i) => i.status === 'completed' && i.resultBlob);
+  const completedItems = items.filter(
+    (i) => i.status === 'completed' && (i.resultBlob || i.userEditedResultBlob)
+  );
   const count = completedItems.length;
 
   if (count === 0) return null;
@@ -37,25 +40,19 @@ export function DownloadButton({ items, settings, disabled }: DownloadButtonProp
 
       for (let i = 0; i < completedItems.length; i++) {
         const item = completedItems[i];
-        let fileBlob = item.resultBlob!;
+        const cutoutUrl = item.userEditedResultUrl || item.resultUrl!;
+        let fileBlob = item.userEditedResultBlob || item.resultBlob!;
 
-        if (
-          settings.backgroundType !== 'transparent' ||
-          settings.padding > 0 ||
-          settings.shadow ||
-          settings.exportFormat !== 'png'
-        ) {
-          try {
-            const img = await loadImageElement(item.resultUrl!);
-            fileBlob = await renderFinalBlob(
-              img,
-              settings,
-              item.originalWidth,
-              item.originalHeight
-            );
-          } catch (renderErr) {
-            console.warn(`Failed to apply styling to ${item.name}:`, renderErr);
-          }
+        try {
+          const img = await loadImageElement(cutoutUrl);
+          fileBlob = await renderFinalBlob(
+            img,
+            settings,
+            item.originalWidth,
+            item.originalHeight
+          );
+        } catch (renderErr) {
+          console.warn(`Failed to apply full styling to ${item.name}:`, renderErr);
         }
 
         const ext = settings.exportFormat || 'png';
@@ -75,9 +72,10 @@ export function DownloadButton({ items, settings, disabled }: DownloadButtonProp
 
       const zipFilename = `cutouts-${new Date().toISOString().slice(0, 10)}.zip`;
       triggerBrowserDownload(zipBlob, zipFilename);
+      toast.success(`Downloaded all ${count} images as ZIP archive`);
     } catch (err) {
       console.error('Failed to create ZIP download:', err);
-      alert('Failed to generate ZIP archive in browser.');
+      toast.error('Failed to generate ZIP archive in browser');
     } finally {
       setIsZipping(false);
       setZipProgress(0);
@@ -86,6 +84,7 @@ export function DownloadButton({ items, settings, disabled }: DownloadButtonProp
 
   return (
     <button
+      type="button"
       onClick={handleDownloadAllZip}
       disabled={disabled || isZipping || count === 0}
       className="h-8 px-3 rounded-md border border-[var(--border)] hover:border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40"
@@ -98,9 +97,7 @@ export function DownloadButton({ items, settings, disabled }: DownloadButtonProp
       ) : (
         <>
           <Archive className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-          <span>
-            Download All ZIP ({count})
-          </span>
+          <span>Download All ZIP ({count})</span>
         </>
       )}
     </button>

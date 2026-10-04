@@ -221,6 +221,71 @@ export default function Home() {
     queueState.items[0] ||
     null;
 
+  // Handle manual eraser & pen brush modifications to the cutout
+  const handleCutoutModified = useCallback(
+    (blob: Blob, url: string) => {
+      if (!selectedItem) return;
+      imageQueue.updateItem(selectedItem.id, {
+        userEditedResultBlob: blob,
+        userEditedResultUrl: url,
+      });
+    },
+    [selectedItem]
+  );
+
+  // Handle batch setting synchronization across images
+  const handleApplyBatchSettings = useCallback(
+    (
+      type: "all" | "background" | "position" | "shadow" | "adjustments" | "canvas",
+      newSettings: EditorSettings
+    ) => {
+      setEditorSettings((prev) => {
+        switch (type) {
+          case "background":
+            return {
+              ...prev,
+              backgroundType: newSettings.backgroundType,
+              customColor: newSettings.customColor,
+              bgImageSettings: newSettings.bgImageSettings,
+            };
+          case "position":
+            return {
+              ...prev,
+              positioning: newSettings.positioning,
+              padding: newSettings.padding,
+              transform: { ...newSettings.transform },
+              aspectRatio: newSettings.aspectRatio,
+            };
+          case "shadow":
+            return {
+              ...prev,
+              shadow: newSettings.shadow,
+              shadowBlur: newSettings.shadowBlur,
+              shadowOpacity: newSettings.shadowOpacity,
+              shadowOffsetY: newSettings.shadowOffsetY,
+              shadowSettings: { ...newSettings.shadowSettings },
+              borderSettings: { ...newSettings.borderSettings },
+            };
+          case "adjustments":
+            return {
+              ...prev,
+              adjustments: { ...newSettings.adjustments },
+            };
+          case "canvas":
+            return {
+              ...prev,
+              aspectRatio: newSettings.aspectRatio,
+              crop: newSettings.crop,
+            };
+          case "all":
+          default:
+            return { ...newSettings };
+        }
+      });
+    },
+    []
+  );
+
   const waitingCount = queueState.items.filter(
     (i) => i.status === "waiting",
   ).length;
@@ -352,6 +417,8 @@ export default function Home() {
                 item={selectedItem}
                 settings={editorSettings}
                 onUpdateSettings={setEditorSettings}
+                onApplyBatchSettings={handleApplyBatchSettings}
+                onCutoutModified={handleCutoutModified}
               />
             )}
           </section>

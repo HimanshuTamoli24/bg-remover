@@ -243,7 +243,7 @@ export class ImageQueueManager {
     this.notify();
   }
 
-  private updateItem(id: string, partial: Partial<QueueItem>) {
+  public updateItem(id: string, partial: Partial<QueueItem>) {
     this.items = this.items.map((i) => (i.id === id ? { ...i, ...partial } : i));
     this.notify();
   }
